@@ -1,0 +1,24 @@
+# The desktop remote sandbox runs on python:3.11-slim, so these pins track a
+# Python 3.11-compatible GPU stack rather than upstream's older Python 3.10-era
+# torch/PyG matrix.
+--find-links https://data.pyg.org/whl/torch-2.0.1+cu117.html
+setuptools==69.5.1
+torch==2.0.1
+torch-cluster==1.6.3+pt20cu117
+torch-geometric==2.2.0
+torch-scatter==2.1.2+pt20cu117
+torch-sparse==0.6.18+pt20cu117
+torch-spline-conv==1.2.2+pt20cu117
+biopython==1.83
+e3nn==0.5.1
+fair-esm==2.0.0
+networkx==2.8.4
+numpy==1.26.4
+pandas==1.5.3
+prody==2.6.1
+pyyaml==6.0.2
+rdkit==2022.9.5
+requests==2.32.3
+scikit-learn==1.1.3
+scipy==1.12.0
+tqdm==4.66.5

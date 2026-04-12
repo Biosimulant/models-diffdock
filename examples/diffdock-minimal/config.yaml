@@ -1,0 +1,16 @@
+example_name: "diffdock-minimal"
+model:
+  path: "../../models/diffdock-diffdockl-docking-predictor"
+  class: "src.diffdockl_docking_predictor:DiffDockLDockingPredictor"
+  parameters:
+    runtime_mode: "managed"
+  inputs:
+    protein_path: "data/1a0q/1a0q_protein_processed.pdb"
+    ligand_description: "COc(cc1)ccc1C#N"
+    run_options:
+      complex_name: "1a0q_custom"
+      samples_per_complex: 2
+      inference_steps: 4
+      batch_size: 2
+      save_visualisation: false
+

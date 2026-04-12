@@ -1,0 +1,4 @@
+models:
+  - models/diffdock-diffdockl-docking-predictor/model.yaml
+spaces: []
+

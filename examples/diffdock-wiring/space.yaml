@@ -1,0 +1,21 @@
+schema_version: "2.0"
+title: "DiffDock-L Single Complex Example"
+description: "Single-model space wiring example for DiffDock-L docking."
+models:
+  - alias: "diffdock"
+    path: "models/diffdock-diffdockl-docking-predictor"
+    parameters:
+      runtime_mode: "managed"
+      default_protein_path: "data/1a0q/1a0q_protein_processed.pdb"
+      default_ligand_description: "COc(cc1)ccc1C#N"
+      default_run_options:
+        complex_name: "1a0q_custom"
+        samples_per_complex: 2
+        inference_steps: 4
+        batch_size: 2
+        save_visualisation: false
+wiring: []
+runtime:
+  duration: 0.01
+  tick_dt: 0.01
+  initial_inputs: {}
