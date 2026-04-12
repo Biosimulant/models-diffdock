@@ -13,12 +13,18 @@ from typing import Any
 import yaml
 
 
-REPO_ROOT = Path("/Volumes/dem-ssd/imp/projects/Nitoons/Biosimulant")
+SCRIPT_ROOT = Path(__file__).resolve().parent
+MODEL_PACK_ROOT = SCRIPT_ROOT.parent
+REPO_ROOT = MODEL_PACK_ROOT.parent.parent
 DESKTOP_SRC_TAURI = REPO_ROOT / "bsim-platform" / "biosimulant-desktop" / "src-tauri"
 DEFAULT_DESKTOP_BIN = DESKTOP_SRC_TAURI / "target" / "debug" / "biosimulant-desktop"
-MODEL_DIR = REPO_ROOT / "models" / "models-diffdock" / "models" / "diffdock-diffdockl-docking-predictor"
-EXAMPLE_CONFIG = REPO_ROOT / "models" / "models-diffdock" / "examples" / "diffdock-minimal" / "config.yaml"
-DEFAULT_OUTPUT = Path("/Users/demi/Desktop/DiffDock_Remote_GPU_Example.bsispace")
+MODEL_DIR = MODEL_PACK_ROOT / "models" / "diffdock-diffdockl-docking-predictor"
+EXAMPLE_CONFIG = MODEL_PACK_ROOT / "examples" / "diffdock-minimal" / "config.yaml"
+DEFAULT_OUTPUT = (
+    Path.home() / "Desktop" / "DiffDock_Remote_GPU_Example.bsispace"
+    if (Path.home() / "Desktop").is_dir()
+    else Path.cwd() / "DiffDock_Remote_GPU_Example.bsispace"
+)
 _TRANSIENT_HUB_POLL_MARKERS = (
     "API error (503)",
     "no available server",
