@@ -8,17 +8,18 @@ import sys
 import time
 
 import pytest
+from biosim.signals import (AcceptedSignalProfile, ArraySignal, BioSignal, EventSignal, RecordSignal, ScalarSignal, SignalSpec)
 import yaml
 
 
 def _set_required_inputs(module, BioSignal, *, protein_path: str | None = None, ligand_description: str | None = None, run_options: dict | None = None):
     signals = {}
     if protein_path is not None:
-        signals["protein_path"] = BioSignal(source="test", name="protein_path", value=protein_path, time=0.0)
+        signals["protein_path"] = _make_signal(source="test", name="protein_path", value=protein_path, emitted_at=0.0, spec=None)
     if ligand_description is not None:
-        signals["ligand_description"] = BioSignal(source="test", name="ligand_description", value=ligand_description, time=0.0)
+        signals["ligand_description"] = _make_signal(source="test", name="ligand_description", value=ligand_description, emitted_at=0.0, spec=None)
     if run_options is not None:
-        signals["run_options"] = BioSignal(source="test", name="run_options", value=run_options, time=0.0)
+        signals["run_options"] = _make_signal(source="test", name="run_options", value=run_options, emitted_at=0.0, spec=None)
     module.set_inputs(signals)
 
 
@@ -39,10 +40,10 @@ def test_instantiation(biosim, tmp_path):
     from src.diffdockl_docking_predictor import DiffDockLDockingPredictor
 
     module = DiffDockLDockingPredictor(work_dir=str(tmp_path))
-    assert module.min_dt > 0
+    assert module.integration_step > 0
     assert module.runtime_mode == "managed"
-    assert module.inputs() == {"protein_path", "ligand_description", "run_options"}
-    assert module.outputs() == {"pose_summary", "confidence_summary", "structure_artifacts", "run_metadata"}
+    assert set(module.inputs()) == {"protein_path", "ligand_description", "run_options"}
+    assert set(module.outputs()) == {"pose_summary", "confidence_summary", "structure_artifacts", "run_metadata"}
     assert module.requirements_file.name == "runtime-gpu.txt"
 
 
@@ -50,11 +51,11 @@ def test_missing_inputs_surface_error_metadata(biosim, tmp_path):
     from src.diffdockl_docking_predictor import DiffDockLDockingPredictor
 
     module = DiffDockLDockingPredictor(work_dir=str(tmp_path))
-    module.advance_to(0.1)
+    module.advance_window(0.0, 0.1)
 
     outputs = module.get_outputs()
-    assert outputs["run_metadata"].value["status"] == "error"
-    assert "protein_path" in outputs["run_metadata"].value["error"]
+    assert _signal_value(outputs["run_metadata"])["status"] == "error"
+    assert "protein_path" in _signal_value(outputs["run_metadata"])["error"]
     assert module.visualize() is None
 
 
@@ -89,9 +90,9 @@ def test_run_options_validation_rejects_unknown_keys(biosim, tmp_path):
         ligand_description="COc(cc1)ccc1C#N",
         run_options={"not_supported": 1},
     )
-    module.advance_to(0.1)
+    module.advance_window(0.0, 0.1)
 
-    metadata = module.get_outputs()["run_metadata"].value
+    metadata = _signal_value(module.get_outputs()["run_metadata"])
     assert metadata["status"] == "error"
     assert "unsupported run_options key" in metadata["error"]
 
@@ -156,13 +157,13 @@ def test_managed_runtime_bootstraps_and_parses_outputs(biosim, tmp_path, monkeyp
             "save_visualisation": True,
         },
     )
-    module.advance_to(0.5)
+    module.advance_window(0.0, 0.5)
 
     outputs = module.get_outputs()
-    metadata = outputs["run_metadata"].value
-    pose_summary = outputs["pose_summary"].value
-    confidence = outputs["confidence_summary"].value
-    artifacts = outputs["structure_artifacts"].value
+    metadata = _signal_value(outputs["run_metadata"])
+    pose_summary = _signal_value(outputs["pose_summary"])
+    confidence = _signal_value(outputs["confidence_summary"])
+    artifacts = _signal_value(outputs["structure_artifacts"])
 
     assert metadata["status"] == "completed"
     assert metadata["repo_bootstrapped"] is True
@@ -286,7 +287,7 @@ def test_advance_emits_progress_events_for_long_steps(biosim, tmp_path, monkeypa
         ligand_description="COc(cc1)ccc1C#N",
     )
 
-    module.advance_to(0.5)
+    module.advance_window(0.0, 0.5)
     captured = capsys.readouterr().out.splitlines()
     progress_events = [
         json.loads(line.removeprefix("BSIM_PROGRESS:"))
@@ -334,9 +335,9 @@ def test_subprocess_failure_surfaces_metadata(biosim, tmp_path, monkeypatch):
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_to(0.5)
+    module.advance_window(0.0, 0.5)
 
-    metadata = module.get_outputs()["run_metadata"].value
+    metadata = _signal_value(module.get_outputs()["run_metadata"])
     assert metadata["status"] == "error"
     assert metadata["returncode"] == 3
     assert "non-zero" in metadata["error"]
@@ -379,9 +380,9 @@ def test_missing_expected_files_becomes_error(biosim, tmp_path, monkeypatch):
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_to(0.5)
+    module.advance_window(0.0, 0.5)
 
-    metadata = module.get_outputs()["run_metadata"].value
+    metadata = _signal_value(module.get_outputs()["run_metadata"])
     assert metadata["status"] == "error"
     assert "expected DiffDock outputs" in metadata["error"]
 
@@ -436,8 +437,8 @@ def test_repeat_advance_does_not_rerun_until_reset(biosim, tmp_path, monkeypatch
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_to(0.2)
-    module.advance_to(0.3)
+    module.advance_window(0.0, 0.2)
+    module.advance_window(0.0, 0.3)
     assert calls["predict"] == 1
 
     module.reset()
@@ -447,16 +448,16 @@ def test_repeat_advance_does_not_rerun_until_reset(biosim, tmp_path, monkeypatch
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_to(0.4)
+    module.advance_window(0.0, 0.4)
     assert calls["predict"] == 2
 
 
 def test_example_files_parse_and_reference_real_interface(biosim):
     repo_root = Path(__file__).resolve().parents[3]
     minimal = yaml.safe_load((repo_root / "examples" / "diffdock-minimal" / "config.yaml").read_text(encoding="utf-8"))
-    wiring = yaml.safe_load((repo_root / "examples" / "diffdock-wiring" / "space.yaml").read_text(encoding="utf-8"))
+    wiring = yaml.safe_load((repo_root / "examples" / "diffdock-wiring" / "lab.yaml").read_text(encoding="utf-8"))
 
-    assert minimal["model"]["path"] == "../../models/diffdock-diffdockl-docking-predictor"
+    assert minimal["model"]["path"] == "../../labs/diffdock-diffdockl-docking-predictor/model"
     assert minimal["model"]["inputs"]["protein_path"] == "data/1a0q/1a0q_protein_processed.pdb"
     assert minimal["model"]["inputs"]["ligand_description"] == "COc(cc1)ccc1C#N"
     assert minimal["model"]["inputs"]["run_options"]["samples_per_complex"] == 2
@@ -576,3 +577,58 @@ def test_real_smoke_example_runs(tmp_path):
     assert outputs["run_metadata"]["value"]["status"] == "completed"
     assert Path(outputs["structure_artifacts"]["value"]["top_complex_file"]).exists()
     assert Path(outputs["structure_artifacts"]["value"]["top_pose_file"]).exists()
+
+
+def _schema_type(value):
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    return "json"
+
+
+def _signal_value(signal):
+    value = signal.value
+    if isinstance(value, dict) and set(value.keys()) == {"payload"}:
+        return value["payload"]
+    return value
+
+
+def _generic_input_spec(description=None):
+    return SignalSpec.record(
+        schema={"payload": "json"},
+        accepted_profiles=(
+            AcceptedSignalProfile(signal_type="record", schema={"payload": "json"}),
+            AcceptedSignalProfile(signal_type="scalar"),
+        ),
+        description=description,
+    )
+
+
+def _make_signal(*, source, name, value, emitted_at, spec=None):
+    if spec is None:
+        if isinstance(value, dict):
+            spec = SignalSpec.record(schema={str(key): _schema_type(item) for key, item in value.items()})
+        elif isinstance(value, (list, tuple)):
+            spec = SignalSpec.record(schema={"payload": "json"})
+        else:
+            spec = SignalSpec.scalar(dtype=_schema_type(value))
+
+    if spec.signal_type == "scalar":
+        return ScalarSignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
+    if spec.signal_type == "array":
+        return ArraySignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
+    if spec.signal_type == "event":
+        event_value = value
+        if spec.schema is not None and not (isinstance(value, dict) and set(value.keys()) == set(spec.schema.keys())):
+            event_value = {"payload": value}
+        return EventSignal(source=source, name=name, value=event_value, emitted_at=emitted_at, spec=spec)
+
+    record_value = value
+    if not isinstance(value, dict) or set(value.keys()) != set((spec.schema or {}).keys()):
+        record_value = {"payload": value}
+    return RecordSignal(source=source, name=name, value=record_value, emitted_at=emitted_at, spec=spec)

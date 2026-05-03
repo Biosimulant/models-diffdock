@@ -1,0 +1,89 @@
+schema_version: "2.0"
+title: "DiffDock: DiffDockLDockingPredictor"
+description: "Wraps upstream DiffDock-L inference for single receptor PDB and single ligand docking runs."
+package: "Biosimulant/models-diffdock:labs/diffdock-diffdockl-docking-predictor/model/model.yaml"
+version: "0.1.0"
+standard: other
+tags: [diffdock, docking, structural-biology, protein-ligand, gpu, cuda]
+authors: ["Biosimulant Team"]
+biosim:
+  communication_step: 0.01
+  entrypoint: "src.diffdockl_docking_predictor:DiffDockLDockingPredictor"
+runtime:
+  remote:
+    init_kwargs:
+      runtime_mode: managed
+      runtime_dir: "${REMOTE_EXECUTION_MOUNT_ROOT}/runtime-cache/diffdock"
+      cache_dir: "${REMOTE_EXECUTION_MOUNT_ROOT}/runtime-cache/diffdock/cache"
+      work_dir: "${REMOTE_EXECUTION_MOUNT_ROOT}/runtime-work/diffdock"
+parameters:
+  - name: default_protein_path
+    value: null
+    description: "Fallback receptor PDB path used when the protein_path input signal is not wired. Resolved relative to the model directory."
+  - name: default_ligand_description
+    value: null
+    description: "Fallback ligand description used when the ligand_description input signal is not wired. Either a SMILES string or a path to an RDKit-readable ligand file (.sdf, .mol, .mol2, .pdb, .pdbqt)."
+  - name: default_run_options
+    value: {}
+    description: "Default DiffDock run options merged onto any run_options input signal. Keys: complex_name, samples_per_complex, inference_steps, batch_size, save_visualisation."
+  - name: runtime_mode
+    value: "managed"
+    description: "managed | external. Managed clones the pinned DiffDock repo and creates a venv on first run. External reuses a pre-installed Python environment."
+  - name: runtime_dir
+    value: null
+    description: "Override for the managed runtime root. Defaults to <repo>/.runtime/diffdock when null."
+  - name: runtime_python
+    value: null
+    description: "Path to an external Python executable. Used only when runtime_mode is external."
+  - name: requirements_file
+    value: null
+    description: "Override for the pip requirements file used to bootstrap the managed venv. Defaults to model/requirements/runtime-gpu.txt."
+  - name: diffdock_repo_url
+    value: "https://github.com/gcorso/DiffDock.git"
+    description: "Upstream DiffDock git repository URL cloned in managed runtime mode."
+  - name: diffdock_git_ref
+    value: "v1.1.3"
+    description: "Pinned upstream DiffDock release tag fetched in managed runtime mode."
+  - name: work_dir
+    value: null
+    description: "Per-run scratch directory for DiffDock outputs. A unique subdirectory is created per advance window. Falls back to the OS temp dir when null."
+  - name: cache_dir
+    value: null
+    description: "Cache directory for torch, huggingface, and xdg state used by DiffDock. Defaults to <runtime_dir>/cache when null."
+  - name: command_timeout_s
+    value: 10800.0
+    min: 1.0
+    units: "s"
+    description: "Timeout for any single DiffDock inference invocation."
+  - name: runtime_setup_timeout_s
+    value: 7200.0
+    min: 1.0
+    units: "s"
+    description: "Timeout for managed runtime setup commands (git clone, venv create, pip install)."
+  - name: progress_heartbeat_s
+    value: 30.0
+    min: 0.0
+    units: "s"
+    description: "Interval between BSIM_PROGRESS heartbeat events while DiffDock setup or inference is running."
+  - name: integration_step
+    value: 0.01
+    min: 0.001
+    units: "s"
+    description: "BioWorld integration step. DiffDock is event-driven so this only paces the wrapper."
+io:
+  inputs:
+    - name: protein_path
+      description: "Receptor PDB file path. Overrides default_protein_path when present."
+    - name: ligand_description
+      description: "Ligand SMILES string or path to an RDKit-readable ligand file. Overrides default_ligand_description when present."
+    - name: run_options
+      description: "DiffDock run options dict merged onto default_run_options. Keys: complex_name (str), samples_per_complex (int), inference_steps (int), batch_size (int), save_visualisation (bool)."
+  outputs:
+    - name: pose_summary
+      description: "Ranked DiffDock poses with rank, confidence score, confidence band (high|moderate|low|unknown), and per-pose SDF file path."
+    - name: confidence_summary
+      description: "Aggregate confidence stats: top_pose_rank, top_pose_confidence, confidence_band, pose_count, all_confidences."
+    - name: structure_artifacts
+      description: "File-backed structural artifacts including the merged top_rank_complex.pdb consumed by the structure3d renderer, the top pose SDF, the confidence and pose summary JSON files, and per-rank SDF and reverseprocess PDB paths."
+    - name: run_metadata
+      description: "Runtime metadata including runtime mode, runtime/cache directories, repo and venv bootstrap flags, the executed command, return code, truncated stdout/stderr, and status (running|completed|error)."

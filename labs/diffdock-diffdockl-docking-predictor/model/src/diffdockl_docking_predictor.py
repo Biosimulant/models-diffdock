@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from biosim import BioModule
-from biosim.signals import BioSignal
+from biosim.signals import (AcceptedSignalProfile, ArraySignal, BioSignal, EventSignal, RecordSignal, ScalarSignal, SignalSpec)
 
 
 _ALLOWED_RUN_OPTIONS = {
@@ -121,6 +121,60 @@ def _coerce_run_options(value: Any) -> dict[str, Any]:
     return out
 
 
+def _schema_type(value):
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    return "json"
+
+
+def _signal_value(signal):
+    value = signal.value
+    if isinstance(value, dict) and set(value.keys()) == {"payload"}:
+        return value["payload"]
+    return value
+
+
+def _generic_input_spec(description=None):
+    return SignalSpec.record(
+        schema={"payload": "json"},
+        accepted_profiles=(
+            AcceptedSignalProfile(signal_type="record", schema={"payload": "json"}),
+            AcceptedSignalProfile(signal_type="scalar"),
+        ),
+        description=description,
+    )
+
+
+def _make_signal(*, source, name, value, emitted_at, spec=None):
+    if spec is None:
+        if isinstance(value, dict):
+            spec = SignalSpec.record(schema={str(key): _schema_type(item) for key, item in value.items()})
+        elif isinstance(value, (list, tuple)):
+            spec = SignalSpec.record(schema={"payload": "json"})
+        else:
+            spec = SignalSpec.scalar(dtype=_schema_type(value))
+
+    if spec.signal_type == "scalar":
+        return ScalarSignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
+    if spec.signal_type == "array":
+        return ArraySignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
+    if spec.signal_type == "event":
+        event_value = value
+        if spec.schema is not None and not (isinstance(value, dict) and set(value.keys()) == set(spec.schema.keys())):
+            event_value = {"payload": value}
+        return EventSignal(source=source, name=name, value=event_value, emitted_at=emitted_at, spec=spec)
+
+    record_value = value
+    if not isinstance(value, dict) or set(value.keys()) != set((spec.schema or {}).keys()):
+        record_value = {"payload": value}
+    return RecordSignal(source=source, name=name, value=record_value, emitted_at=emitted_at, spec=spec)
+
 class DiffDockLDockingPredictor(BioModule):
     """Run upstream DiffDock-L for a single receptor PDB plus ligand input."""
 
@@ -140,9 +194,9 @@ class DiffDockLDockingPredictor(BioModule):
         command_timeout_s: float = 10_800.0,
         runtime_setup_timeout_s: float = 7_200.0,
         progress_heartbeat_s: float = 30.0,
-        min_dt: float = 0.01,
+        integration_step: float = 0.01,
     ) -> None:
-        self.min_dt = min_dt
+        self.integration_step = float(integration_step)
         self.runtime_mode = runtime_mode
         self.runtime_python = runtime_python
         self.diffdock_repo_url = diffdock_repo_url
@@ -179,11 +233,20 @@ class DiffDockLDockingPredictor(BioModule):
         self._cached_payloads: dict[str, Any] = {}
         self._last_signature: Optional[str] = None
 
-    def inputs(self) -> set[str]:
-        return {"protein_path", "ligand_description", "run_options"}
+    def inputs(self) -> dict[str, SignalSpec]:
+        return {
+            'protein_path': _generic_input_spec(),
+            'ligand_description': _generic_input_spec(),
+            'run_options': _generic_input_spec(),
+        }
 
-    def outputs(self) -> set[str]:
-        return {"pose_summary", "confidence_summary", "structure_artifacts", "run_metadata"}
+    def outputs(self) -> dict[str, SignalSpec]:
+        return {
+            'pose_summary': SignalSpec.record(schema={'payload': 'json'}),
+            'confidence_summary': SignalSpec.record(schema={'payload': 'json'}),
+            'structure_artifacts': SignalSpec.record(schema={'payload': 'json'}),
+            'run_metadata': SignalSpec.record(schema={'payload': 'json'}),
+        }
 
     def reset(self) -> None:
         self._outputs = {}
@@ -195,7 +258,7 @@ class DiffDockLDockingPredictor(BioModule):
 
         protein_signal = signals.get("protein_path")
         if protein_signal is not None:
-            protein_path = _coerce_string(protein_signal.value, "path")
+            protein_path = _coerce_string(_signal_value(protein_signal), "path")
             if protein_path != self._protein_path:
                 self._protein_path = protein_path
                 changed = True
@@ -203,7 +266,7 @@ class DiffDockLDockingPredictor(BioModule):
         ligand_signal = signals.get("ligand_description")
         if ligand_signal is not None:
             ligand_description = _coerce_string(
-                ligand_signal.value, "path", "smiles", "description"
+                _signal_value(ligand_signal), "path", "smiles", "description"
             )
             if ligand_description != self._ligand_description:
                 self._ligand_description = ligand_description
@@ -211,7 +274,7 @@ class DiffDockLDockingPredictor(BioModule):
 
         run_signal = signals.get("run_options")
         if run_signal is not None:
-            run_options = _coerce_run_options(run_signal.value)
+            run_options = _coerce_run_options(_signal_value(run_signal))
             if run_options != self._run_options:
                 self._run_options = run_options
                 changed = True
@@ -219,7 +282,8 @@ class DiffDockLDockingPredictor(BioModule):
         if changed:
             self._last_signature = None
 
-    def advance_to(self, t: float) -> None:
+    def advance_window(self, start: float, end: float) -> None:
+        t = float(end)
         metadata: dict[str, Any] = {
             "status": "running",
             "runtime_mode": self.runtime_mode,
@@ -1151,12 +1215,7 @@ class DiffDockLDockingPredictor(BioModule):
     def _emit_outputs(self, t: float) -> None:
         self._outputs = {}
         for name in self.outputs():
-            self._outputs[name] = BioSignal(
-                source="diffdock",
-                name=name,
-                value=self._cached_payloads.get(name, {}),
-                time=t,
-            )
+            self._outputs[name] = _make_signal(source="diffdock", name=name, value=self._cached_payloads.get(name, {}), emitted_at=t, spec=self.outputs().get(name))
 
     def _confidence_band(self, value: Any) -> str:
         if not isinstance(value, (int, float)):

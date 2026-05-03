@@ -9,7 +9,7 @@ This repository currently includes:
   Checked-in official sample assets for both the processed receptor PDB and the
   ligand SDF.
 - `diffdock-wiring`:
-  Single-model `space.yaml` example showing how to wire the model into a lab.
+  Single-model `lab.yaml` example showing how to wire the model into a lab.
 - `build_diffdock_bsispace.py`:
-  Desktop automation script that exports a portable `.bsispace`, reimports it,
+  Desktop automation script that exports a portable `.bsilab`, reimports it,
   stages it to Hub, runs it remotely on a GPU, and validates the synced results.

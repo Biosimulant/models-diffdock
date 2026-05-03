@@ -21,9 +21,9 @@ DEFAULT_DESKTOP_BIN = DESKTOP_SRC_TAURI / "target" / "debug" / "biosimulant-desk
 MODEL_DIR = MODEL_PACK_ROOT / "models" / "diffdock-diffdockl-docking-predictor"
 EXAMPLE_CONFIG = MODEL_PACK_ROOT / "examples" / "diffdock-minimal" / "config.yaml"
 DEFAULT_OUTPUT = (
-    Path.home() / "Desktop" / "DiffDock_Remote_GPU_Example.bsispace"
+    Path.home() / "Desktop" / "DiffDock_Remote_GPU_Example.bsilab"
     if (Path.home() / "Desktop").is_dir()
-    else Path.cwd() / "DiffDock_Remote_GPU_Example.bsispace"
+    else Path.cwd() / "DiffDock_Remote_GPU_Example.bsilab"
 )
 _TRANSIENT_HUB_POLL_MARKERS = (
     "API error (503)",
@@ -137,7 +137,7 @@ def create_remote_run_with_size_fallback(
                     "payload": {
                         "space_id": hub_space_id,
                         "space_commit": space_commit,
-                        "simulation_config": {"duration": 0.01, "tick_dt": 0.01, "initial_inputs": {}},
+                        "simulation_config": {"duration": 0.01, "initial_inputs": {}},
                         "remote_size_id": remote_size["id"],
                     }
                 },
@@ -217,7 +217,7 @@ def build_manifest(
         "wiring": [],
         "runtime": {
             "duration": 0.01,
-            "tick_dt": 0.01,
+            "communication_step": 0.01,
             "initial_inputs": {},
         },
         "scientific_context": {
@@ -275,7 +275,7 @@ def mirror_and_wait_for_remote_results(
             "status": remote_status,
             "execution_target": "remote",
             "hub_run_id": remote_run_id,
-            "simulation_config": {"duration": 0.01, "tick_dt": 0.01, "initial_inputs": {}},
+            "simulation_config": {"duration": 0.01, "initial_inputs": {}},
         },
     )
     local_run_id = local_run["id"]
@@ -323,7 +323,7 @@ def mirror_and_wait_for_remote_results(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build and validate a portable DiffDock-L .bsispace package.")
+    parser = argparse.ArgumentParser(description="Build and validate a portable DiffDock-L .bsilab package.")
     parser.add_argument("--desktop-bin", type=Path, default=DEFAULT_DESKTOP_BIN)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--skip-remote-validation", action="store_true")
@@ -335,7 +335,7 @@ def main() -> None:
     build_root = Path(tempfile.mkdtemp(prefix="diffdock-bsispace-build-"))
     export_dir = build_root / "export"
     export_dir.mkdir(parents=True, exist_ok=True)
-    package_tmp_path = export_dir / "DiffDock_Remote_GPU_Example.bsispace"
+    package_tmp_path = export_dir / "DiffDock_Remote_GPU_Example.bsilab"
 
     data_dir = build_root / "data"
     import_data_dir = build_root / "imported-data"
