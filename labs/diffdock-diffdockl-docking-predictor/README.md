@@ -15,7 +15,11 @@ The lab opens as a small canvas with one DiffDock-L docking node and a run-resul
 - a confidence summary with the top pose score and confidence band,
 - run metadata with the executed command, returncode, and truncated stdout/stderr.
 
-Screenshots will be added under `assets/` after the first published run produces them.
+The first screenshot shows the canvas, node inputs and outputs, and the structure3d view for the top-ranked docked complex. The second scrolls down to the artifact details and ranked pose table for the same run, where the bundled `1a0q` job reports 10 poses and a top confidence of `-2.23` in the `low` band.
+
+![DiffDock-L lab canvas with top-ranked docked complex structure view](assets/diffdockl-docking-top-ranked-complex.png)
+
+![DiffDock-L artifact details and ranked pose confidence table](assets/diffdockl-docking-pose-summary.png)
 
 ## How to Read the Visualizations
 
@@ -23,7 +27,7 @@ The pose ranking table lists each DiffDock pose with its rank, confidence score,
 
 The structure3d view shows the receptor with the top-ranked ligand pose merged in as `top_rank_complex.pdb`. Use it to sanity-check that the ligand sits inside a plausible binding pocket. If the ligand sits outside the receptor surface, treat the run as low-confidence regardless of the score.
 
-The confidence summary captures the top pose rank, its confidence, the confidence band, the total pose count, and every per-pose confidence so you can spot bimodal pose distributions. The run metadata reports which runtime mode executed, where the managed runtime cached the DiffDock checkout and venv, the resolved inference command, the returncode, the truncated stdout/stderr from DiffDock, and `status: completed` or `status: error` so a failed run is still inspectable.
+The confidence summary captures the top pose rank, its confidence, the confidence band, the total pose count, and every per-pose confidence so you can spot bimodal pose distributions. In the shown default run, all 10 poses are in the `low` band, so the result is best read as a structural smoke test and not as a high-confidence binding prediction. The run metadata reports which runtime mode executed, where the managed runtime cached the DiffDock checkout and venv, the resolved inference command, the returncode, the truncated stdout/stderr from DiffDock, and `status: completed` or `status: error` so a failed run is still inspectable.
 
 ## What This Lab Contains
 
