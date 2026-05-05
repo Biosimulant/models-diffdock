@@ -59,17 +59,6 @@ The model accepts three input signals. Each one falls back to the matching `defa
 - `structure_artifacts` (record): file-backed artifacts including the merged `top_rank_complex.pdb` consumed by the structure3d renderer, the top pose SDF, the confidence and pose summary JSON files, and per-rank SDF and reverseprocess PDB paths.
 - `run_metadata` (record): runtime metadata, runtime mode, runtime/cache directories, the executed command, returncode, truncated stdout/stderr, and `status: completed` or `status: error`.
 
-## Running with the Bundled Defaults
-
-The same complex is also wired up as a direct local example in [`examples/diffdock-minimal/config.yaml`](../../examples/diffdock-minimal/config.yaml). To run it without the desktop app:
-
-```bash
-cd /path/to/models-diffdock
-python3 examples/run_example.py diffdock-minimal
-```
-
-That produces the same four BioSignal outputs as a desktop run. The first invocation clones the upstream DiffDock repo and builds the managed venv under `.runtime/diffdock/`; later runs reuse the cached checkout and environment.
-
 ## Running in Biosimulant Desktop
 
 Import the lab once with the Biosim CLI, then open it from the desktop app. The bundled `1a0q` defaults mean the first run requires no parameter editing.

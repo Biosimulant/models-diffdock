@@ -1,6 +1,6 @@
 # models-diffdock
 
-> Storage-only repo: each former root model now lives in `labs/<slug>/model/` and is wrapped by
+> Storage-only repo: each former root model now lives in `labs/<slug>/models/core/` and is wrapped by
 > `labs/<slug>/lab.yaml`. This repo has no repo-level import catalog and no composed labs at the root.
 
 Curated collection of **DiffDock-family docking models** for the **biosim**
@@ -41,7 +41,3 @@ The DiffDock model uses the existing generic remote execution path:
 
 The release-grade validation target is Linux + NVIDIA GPU on Modal.
 
-## Examples
-
-See [examples/README.md](examples/README.md) for the example inventory, including
-the remote `.bsilab` builder used for desktop end-to-end validation.

@@ -1,38 +1,56 @@
-schema_version: "2.0"
-title: "DiffDock: DiffDockLDockingPredictor Lab"
-description: "Single-model lab wrapper for DiffDock-L 1.1.3 single-complex docking. Ships with the bundled 1a0q receptor and a SMILES ligand so the lab runs out of the box."
+schema_version: '2.0'
+title: 'DiffDock: DiffDockLDockingPredictor Lab'
+description: Multi-model lab with an embedded visualisation sibling for DiffDock-L 1.1.3 single-complex docking.
+  Ships with the bundled 1a0q receptor and a SMILES ligand so the lab runs out of
+  the box.
 models:
-  - alias: diffdock_diffdockl_docking_predictor
-    path: model
-    parameters:
-      runtime_mode: "managed"
-      default_protein_path: "data/1a0q/1a0q_protein_processed.pdb"
-      default_ligand_description: "COc(cc1)ccc1C#N"
-      default_run_options:
-        complex_name: "1a0q_custom"
-        samples_per_complex: 2
-        inference_steps: 4
-        batch_size: 2
-        save_visualisation: false
+- alias: diffdock_diffdockl_docking_predictor
+  path: models/core
+  parameters:
+    runtime_mode: managed
+    default_protein_path: data/1a0q/1a0q_protein_processed.pdb
+    default_ligand_description: COc(cc1)ccc1C#N
+    default_run_options:
+      complex_name: 1a0q_custom
+      samples_per_complex: 2
+      inference_steps: 4
+      batch_size: 2
+      save_visualisation: false
+- alias: visualisation
+  path: models/visualisation
+  parameters:
+    integration_step: 0.01
 runtime:
   duration: 0.01
   communication_step: 0.01
   initial_inputs: {}
 io:
   inputs:
-    - name: protein_path
-      maps_to: diffdock_diffdockl_docking_predictor.protein_path
-    - name: ligand_description
-      maps_to: diffdock_diffdockl_docking_predictor.ligand_description
-    - name: run_options
-      maps_to: diffdock_diffdockl_docking_predictor.run_options
+  - name: protein_path
+    maps_to: diffdock_diffdockl_docking_predictor.protein_path
+  - name: ligand_description
+    maps_to: diffdock_diffdockl_docking_predictor.ligand_description
+  - name: run_options
+    maps_to: diffdock_diffdockl_docking_predictor.run_options
   outputs:
-    - name: pose_summary
-      maps_to: diffdock_diffdockl_docking_predictor.pose_summary
-    - name: confidence_summary
-      maps_to: diffdock_diffdockl_docking_predictor.confidence_summary
-    - name: structure_artifacts
-      maps_to: diffdock_diffdockl_docking_predictor.structure_artifacts
-    - name: run_metadata
-      maps_to: diffdock_diffdockl_docking_predictor.run_metadata
-wiring: []
+  - name: pose_summary
+    maps_to: diffdock_diffdockl_docking_predictor.pose_summary
+  - name: confidence_summary
+    maps_to: diffdock_diffdockl_docking_predictor.confidence_summary
+  - name: structure_artifacts
+    maps_to: diffdock_diffdockl_docking_predictor.structure_artifacts
+  - name: run_metadata
+    maps_to: diffdock_diffdockl_docking_predictor.run_metadata
+wiring:
+- from: diffdock_diffdockl_docking_predictor.pose_summary
+  to:
+  - visualisation.diffdock_diffdockl_docking_predictor_pose_summary
+- from: diffdock_diffdockl_docking_predictor.confidence_summary
+  to:
+  - visualisation.diffdock_diffdockl_docking_predictor_confidence_summary
+- from: diffdock_diffdockl_docking_predictor.structure_artifacts
+  to:
+  - visualisation.diffdock_diffdockl_docking_predictor_structure_artifacts
+- from: diffdock_diffdockl_docking_predictor.run_metadata
+  to:
+  - visualisation.diffdock_diffdockl_docking_predictor_run_metadata

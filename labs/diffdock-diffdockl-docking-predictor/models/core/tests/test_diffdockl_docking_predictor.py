@@ -182,13 +182,7 @@ def test_managed_runtime_bootstraps_and_parses_outputs(biosim, tmp_path, monkeyp
     assert any(cmd[:4] == ["git", "clone", "--branch", "v1.1.3"] for cmd in commands)
     assert any("--save_visualisation" in cmd for cmd in commands if cmd and cmd[0].endswith("python"))
 
-    visuals = module.visualize()
-    assert visuals is not None
-    assert visuals[0]["render"] == "structure3d"
-    assert visuals[0]["data"]["format"] == "pdb"
-    assert visuals[0]["data"]["source"]["kind"] == "artifact"
-    assert visuals[1]["render"] == "table"
-    assert visuals[1]["data"]["columns"] == ["Rank", "Confidence", "Band", "Pose File"]
+    assert module.visualize() is None
 
 
 def test_generated_structure_paths_remain_absolute_without_canonicalizing(biosim, tmp_path):
@@ -230,10 +224,7 @@ def test_generated_structure_paths_remain_absolute_without_canonicalizing(biosim
         "confidence_summary": {"top_pose_confidence": 0.16, "confidence_band": "high", "pose_count": 1},
         "pose_summary": [{"rank": 1, "confidence": 0.16, "confidence_band": "high", "file_path": str(top_pose_path)}],
     }
-    visuals = module.visualize()
-    assert visuals is not None
-    assert visuals[0]["data"]["source"]["path"] == str(top_complex_file)
-    assert "/../" in visuals[0]["data"]["source"]["path"]
+    assert module.visualize() is None
 
 
 def test_advance_emits_progress_events_for_long_steps(biosim, tmp_path, monkeypatch, capsys):
@@ -453,15 +444,15 @@ def test_repeat_advance_does_not_rerun_until_reset(biosim, tmp_path, monkeypatch
 
 
 def test_example_files_parse_and_reference_real_interface(biosim):
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[5]
     minimal = yaml.safe_load((repo_root / "examples" / "diffdock-minimal" / "config.yaml").read_text(encoding="utf-8"))
     wiring = yaml.safe_load((repo_root / "examples" / "diffdock-wiring" / "lab.yaml").read_text(encoding="utf-8"))
 
-    assert minimal["model"]["path"] == "../../labs/diffdock-diffdockl-docking-predictor/model"
+    assert minimal["model"]["path"] == "../../labs/diffdock-diffdockl-docking-predictor/models/core"
     assert minimal["model"]["inputs"]["protein_path"] == "data/1a0q/1a0q_protein_processed.pdb"
     assert minimal["model"]["inputs"]["ligand_description"] == "COc(cc1)ccc1C#N"
     assert minimal["model"]["inputs"]["run_options"]["samples_per_complex"] == 2
-    assert wiring["models"][0]["path"] == "models/diffdock-diffdockl-docking-predictor"
+    assert wiring["models"][0]["path"] == "../../labs/diffdock-diffdockl-docking-predictor/models/core"
     assert wiring["models"][0]["parameters"]["default_protein_path"] == "data/1a0q/1a0q_protein_processed.pdb"
     assert wiring["models"][0]["parameters"]["default_run_options"]["inference_steps"] == 4
 
@@ -551,7 +542,7 @@ def test_ligand_pdb_lines_fall_back_to_runtime_python_when_rdkit_is_missing(bios
     reason="Set BIOSIM_DIFFDOCK_RUN_REAL_SMOKE=1 to run the real DiffDock smoke test.",
 )
 def test_real_smoke_example_runs(tmp_path):
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[5]
     output_json = tmp_path / "real-smoke-output.json"
     completed = subprocess.run(
         [

@@ -1,7 +1,7 @@
 schema_version: "2.0"
 title: "DiffDock: DiffDockLDockingPredictor"
 description: "Wraps upstream DiffDock-L inference for single receptor PDB and single ligand docking runs."
-package: "Biosimulant/models-diffdock:labs/diffdock-diffdockl-docking-predictor/model/model.yaml"
+package: "Biosimulant/models-diffdock:labs/diffdock-diffdockl-docking-predictor/models/core/model.yaml"
 version: "0.1.0"
 standard: other
 tags: [diffdock, docking, structural-biology, protein-ligand, gpu, cuda]

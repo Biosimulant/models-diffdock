@@ -1,0 +1,25 @@
+schema_version: "2.0"
+title: "DiffDock-L Visualisation"
+description: "Dedicated presentation model for this docking lab."
+standard: other
+tags:
+  - docking
+  - visualisation
+authors:
+  - "Biosimulant Team"
+biosim:
+  entrypoint: "src.docking_visualisation:DockingVisualisationModel"
+  init_kwargs:
+    integration_step: 0.01
+    source_alias: "diffdock_diffdockl_docking_predictor"
+    mode: "diffdock"
+    lab_title: "DiffDock-L Visualisation"
+  communication_step: 0.01
+parameters:
+  - name: integration_step
+    value: 0.01
+    min: 0.0
+    description: "Sampling step for the visualisation model."
+io:
+  inputs: []
+  outputs: []

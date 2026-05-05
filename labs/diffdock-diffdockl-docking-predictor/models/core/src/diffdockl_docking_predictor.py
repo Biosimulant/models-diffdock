@@ -433,77 +433,7 @@ class DiffDockLDockingPredictor(BioModule):
         return dict(self._outputs)
 
     def visualize(self) -> Optional[list[dict[str, Any]]]:
-        run_metadata = self._cached_payloads.get("run_metadata")
-        artifacts = self._cached_payloads.get("structure_artifacts")
-        confidence = self._cached_payloads.get("confidence_summary")
-        poses = self._cached_payloads.get("pose_summary")
-
-        if not isinstance(run_metadata, Mapping) or run_metadata.get("status") != "completed":
-            return None
-        if not isinstance(artifacts, Mapping):
-            return None
-        if not isinstance(poses, list):
-            return None
-
-        top_complex_raw = artifacts.get("top_complex_file")
-        if not isinstance(top_complex_raw, str) or not top_complex_raw:
-            return None
-
-        top_complex_path = Path(top_complex_raw).expanduser()
-        if not top_complex_path.is_absolute():
-            top_complex_path = Path.cwd() / top_complex_path
-        rows: list[list[str]] = []
-        for row in poses:
-            if not isinstance(row, Mapping):
-                continue
-            rows.append(
-                [
-                    str(row.get("rank", "")),
-                    "" if row.get("confidence") is None else str(row.get("confidence")),
-                    str(row.get("confidence_band") or ""),
-                    Path(str(row.get("file_path", ""))).name,
-                ]
-            )
-
-        return [
-            {
-                "render": "structure3d",
-                "description": "Top-ranked DiffDock-L complex for the latest docking run.",
-                "data": {
-                    "title": "Top-Ranked Docked Complex",
-                    "source": {
-                        "kind": "artifact",
-                        "artifact_id": self._structure_artifact_id(top_complex_path),
-                        "path": str(top_complex_path),
-                    },
-                    "format": "pdb",
-                    "annotations": [
-                        {
-                            "label": "Top Pose Confidence",
-                            "value": confidence.get("top_pose_confidence"),
-                        },
-                        {
-                            "label": "Confidence Band",
-                            "value": confidence.get("confidence_band"),
-                        },
-                        {
-                            "label": "Pose Count",
-                            "value": confidence.get("pose_count"),
-                        },
-                    ],
-                    "initial_view": {"reset_camera": True},
-                },
-            },
-            {
-                "render": "table",
-                "description": "Ranked pose summary from the latest DiffDock-L run.",
-                "data": {
-                    "title": "DiffDock Pose Summary",
-                    "columns": ["Rank", "Confidence", "Band", "Pose File"],
-                    "rows": rows,
-                },
-            },
-        ]
+        return None
 
     def _resolved_options(self) -> dict[str, Any]:
         resolved: dict[str, Any] = {

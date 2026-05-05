@@ -1,6 +1,6 @@
 example_name: "diffdock-minimal"
 model:
-  path: "../../labs/diffdock-diffdockl-docking-predictor/model"
+  path: "../../labs/diffdock-diffdockl-docking-predictor/models/core"
   class: "src.diffdockl_docking_predictor:DiffDockLDockingPredictor"
   parameters:
     runtime_mode: "managed"
