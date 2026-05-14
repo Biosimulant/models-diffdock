@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "local_id": "1b5eee65-6115-452d-baed-026efccee7f5",
+  "kind": "lab",
+  "source": "local",
+  "hub_id": "5bb4fd94-ca5c-4fac-b314-2bc5b5d527c2",
+  "created_at": "2026-05-13T22:01:44.733015414+00:00",
+  "last_synced_at": "2026-05-14T16:15:04.172556+00:00",
+  "hub_manifest_hash": "ed9dfd82f6ca84c9380f82021894d82f8af705d31ab327550aac2909d7d12cf2",
+  "package_name": "diffdock-diffdockldockingpredictor-lab"
+}

@@ -22,6 +22,8 @@ from typing import Any, Optional
 
 from biosim import BioModule
 from biosim.signals import (AcceptedSignalProfile, ArraySignal, BioSignal, EventSignal, RecordSignal, ScalarSignal, SignalSpec)
+from biosim.signals import unwrap_payload as _signal_value
+from biosim.signals import make_signal as _make_signal
 
 
 _ALLOWED_RUN_OPTIONS = {
@@ -133,12 +135,6 @@ def _schema_type(value):
     return "json"
 
 
-def _signal_value(signal):
-    value = signal.value
-    if isinstance(value, dict) and set(value.keys()) == {"payload"}:
-        return value["payload"]
-    return value
-
 
 def _generic_input_spec(description=None):
     return SignalSpec.record(
@@ -150,30 +146,6 @@ def _generic_input_spec(description=None):
         description=description,
     )
 
-
-def _make_signal(*, source, name, value, emitted_at, spec=None):
-    if spec is None:
-        if isinstance(value, dict):
-            spec = SignalSpec.record(schema={str(key): _schema_type(item) for key, item in value.items()})
-        elif isinstance(value, (list, tuple)):
-            spec = SignalSpec.record(schema={"payload": "json"})
-        else:
-            spec = SignalSpec.scalar(dtype=_schema_type(value))
-
-    if spec.signal_type == "scalar":
-        return ScalarSignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
-    if spec.signal_type == "array":
-        return ArraySignal(source=source, name=name, value=value, emitted_at=emitted_at, spec=spec)
-    if spec.signal_type == "event":
-        event_value = value
-        if spec.schema is not None and not (isinstance(value, dict) and set(value.keys()) == set(spec.schema.keys())):
-            event_value = {"payload": value}
-        return EventSignal(source=source, name=name, value=event_value, emitted_at=emitted_at, spec=spec)
-
-    record_value = value
-    if not isinstance(value, dict) or set(value.keys()) != set((spec.schema or {}).keys()):
-        record_value = {"payload": value}
-    return RecordSignal(source=source, name=name, value=record_value, emitted_at=emitted_at, spec=spec)
 
 class DiffDockLDockingPredictor(BioModule):
     """Run upstream DiffDock-L for a single receptor PDB plus ligand input."""

@@ -4,8 +4,15 @@
     {
       "id": "diffdock_diffdockl_docking_predictor",
       "position": {
-        "x": 360,
+        "x": 0,
         "y": 0
+      }
+    },
+    {
+      "id": "visualisation",
+      "position": {
+        "x": 307.18631178707227,
+        "y": 330.57414448669203
       }
     }
   ]

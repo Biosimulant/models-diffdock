@@ -74,4 +74,5 @@ To dock a different complex, override the inputs in the lab's run sidebar (or wi
 - The first real run needs internet access (to clone the upstream DiffDock repo and download model checkpoints) and a working `git` executable. Subsequent runs are offline.
 - DiffDock-L is GPU-friendly. CPU inference works for short smoke tests but is slow for production sample counts.
 - Managed runtime mode is required for remote execution. External mode (using a pre-installed DiffDock environment) is supported for local debugging via `runtime_mode: external` plus `runtime_python`.
+- The lab sets `runtime.settle_steps: 1` so the downstream visualization module can consume the final structure artifacts without extending simulated time.
 - `model/data/1a0q/` is shipped as part of the model package so the defaults resolve in remote runs too.

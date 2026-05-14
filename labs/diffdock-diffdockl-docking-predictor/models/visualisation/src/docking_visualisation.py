@@ -10,15 +10,8 @@ from typing import Any, Dict, Mapping, Optional
 
 from biosim import BioModule
 from biosim.signals import AcceptedSignalProfile, BioSignal, SignalSpec
+from biosim.signals import unwrap_payload as _signal_value
 
-
-def _signal_value(signal: BioSignal | None) -> Any:
-    if signal is None:
-        return None
-    value = getattr(signal, "value", None)
-    if isinstance(value, dict) and set(value.keys()) == {"payload"}:
-        return value["payload"]
-    return value
 
 
 def _record_input_spec(description: str) -> SignalSpec:
