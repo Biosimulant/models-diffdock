@@ -5,7 +5,7 @@
   "source": "local",
   "hub_id": "5bb4fd94-ca5c-4fac-b314-2bc5b5d527c2",
   "created_at": "2026-05-13T22:01:44.733015414+00:00",
-  "last_synced_at": "2026-05-14T16:15:04.172556+00:00",
-  "hub_manifest_hash": "ed9dfd82f6ca84c9380f82021894d82f8af705d31ab327550aac2909d7d12cf2",
+  "last_synced_at": "2026-05-15T11:35:35.578048+00:00",
+  "hub_manifest_hash": "fa7d84c5888ddabc2d1ff2a5c7984f735af6b393910c2261c42ada166efd0f56",
   "package_name": "diffdock-diffdockldockingpredictor-lab"
 }
