@@ -39,6 +39,8 @@ runtime:
   initial_inputs: {}
   settle_steps: 1
 schema_version: '2.0'
+package: diffdock-diffdockl-docking-predictor
+version: 1.0.0
 tags:
 - docking
 - diffdock
