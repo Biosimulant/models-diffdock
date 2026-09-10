@@ -30,7 +30,11 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - name: Check public/internal boundary
-        run: bash scripts/check_public_boundary.sh
+        run: |
+          if rg -n --hidden --glob '!.git/**' --glob '!internal/**' '(^|/)internal/' .; then
+            echo "Public content must not reference internal repository paths." >&2
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -39,11 +43,18 @@ jobs:
           pip install pyyaml
           pip install "biosim @ git+https://github.com/BioSimulant/biosim.git@main"
       - name: Validate manifest schema
-        run: python scripts/validate_manifests.py
-      - name: Check entrypoints
-        run: python scripts/check_entrypoints.py
+        run: |
+          for lab in labs/*; do
+            [ -d "$lab" ] || continue
+            biosimulant labs validate "$lab"
+          done
       - name: Build packages
-        run: python scripts/validate_packages.py
+        run: |
+          output_dir="$(mktemp -d)"
+          for lab in labs/*; do
+            [ -d "$lab" ] || continue
+            biosimulant labs package "$lab" --out "$output_dir"
+          done
 
   smoke-sandbox:
     runs-on: ubuntu-latest
@@ -58,6 +69,9 @@ jobs:
           pip install "biosim @ git+https://github.com/BioSimulant/biosim.git@main"
       - name: Smoke run checks (sandbox-compatible image)
         run: |
-          python scripts/validate_manifests.py
-          python scripts/check_entrypoints.py
-          python scripts/validate_packages.py
+          output_dir="$(mktemp -d)"
+          for lab in labs/*; do
+            [ -d "$lab" ] || continue
+            biosimulant labs validate "$lab"
+            biosimulant labs package "$lab" --out "$output_dir"
+          done
