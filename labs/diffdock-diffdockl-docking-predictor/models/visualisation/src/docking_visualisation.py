@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from biosim import BioModule
+from biosim import BioModule, ExecutionContext, ExecutionPolicy
 from biosim.signals import AcceptedSignalProfile, BioSignal, SignalSpec
 from biosim.signals import unwrap_payload as _signal_value
 
@@ -26,6 +26,8 @@ def _record_input_spec(description: str) -> SignalSpec:
 
 
 class DockingVisualisationModel(BioModule):
+    execution_policy = ExecutionPolicy.ONCE_BEFORE_RUN
+
     def __init__(
         self,
         integration_step: float = 0.01,
@@ -55,17 +57,20 @@ class DockingVisualisationModel(BioModule):
         return {}
 
     def reset(self) -> None:
+        super().reset()
         self._inputs = {}
 
     def set_inputs(self, signals: dict[str, BioSignal]) -> None:
         self._inputs.update(signals or {})
 
-    def advance_window(self, start: float | None = None, end: float | None = None, inputs: dict[str, BioSignal] | None = None) -> dict[str, BioSignal]:
+    def execute(self, inputs: Mapping[str, BioSignal], *, context: ExecutionContext) -> Mapping[str, BioSignal]:
+        self.set_inputs(dict(inputs))
+        result = self._execute_at_time(0.0, 0.0)
+        return dict(result if result is not None else getattr(self, "_outputs", {}))
+
+    def _execute_at_time(self, start: float | None = None, end: float | None = None, inputs: dict[str, BioSignal] | None = None) -> dict[str, BioSignal]:
         if inputs:
             self.set_inputs(inputs)
-        return {}
-
-    def get_outputs(self) -> dict[str, BioSignal]:
         return {}
 
     def visualize(self) -> Optional[list[dict[str, Any]]]:

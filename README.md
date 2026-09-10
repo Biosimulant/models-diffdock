@@ -10,6 +10,16 @@ This repository currently ships one native Python `biosim.BioModule` wrapper:
 `diffdock-diffdockl-docking-predictor`, a single-complex DiffDock-L docking
 module for protein PDB plus ligand runs.
 
+## Runtime compatibility
+
+The model and visualization wrappers use `BioModule.execute()` with
+`ExecutionPolicy.ONCE_BEFORE_RUN`. BioWorld therefore invokes each wrapper once
+per run and drains their dependency chain before temporal windows begin. The Lab
+manifest is intentionally unchanged for compatibility with current products;
+its short duration and settle fields no longer control how often these wrappers
+run. Biosimulant runtimes predating invocation-policy support require the prior
+wrapper release.
+
 ## What's Inside
 
 ### Wrapper Sublabs
@@ -40,4 +50,3 @@ The DiffDock model uses the existing generic remote execution path:
 - the wrapper clones the pinned upstream DiffDock repo at `v1.1.3`, runs inference, and emits a merged `top_rank_complex.pdb` artifact for the existing `structure3d` renderer
 
 The release-grade validation target is Linux + NVIDIA GPU on Modal.
-

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from biosim.modules import ExecutionContext, ExecutionPolicy
 
 
 _MODEL_DIR = Path(__file__).resolve().parents[1]
@@ -80,7 +81,7 @@ def test_visualisation_model_renders_docking_visuals(tmp_path):
         }
 
     module.set_inputs(inputs)
-    module.advance_window(0.0, step)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=step))
 
     assert module.outputs() == {}
     assert module.get_outputs() == {}

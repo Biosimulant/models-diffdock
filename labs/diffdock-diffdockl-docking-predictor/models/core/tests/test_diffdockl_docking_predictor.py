@@ -9,6 +9,7 @@ import time
 
 import pytest
 from biosim.signals import (AcceptedSignalProfile, ArraySignal, BioSignal, EventSignal, RecordSignal, ScalarSignal, SignalSpec)
+from biosim.modules import ExecutionContext, ExecutionPolicy
 import yaml
 from biosim.signals import unwrap_payload as _signal_value
 from biosim.signals import make_signal as _make_signal
@@ -53,9 +54,8 @@ def test_missing_inputs_surface_error_metadata(biosim, tmp_path):
     from src.diffdockl_docking_predictor import DiffDockLDockingPredictor
 
     module = DiffDockLDockingPredictor(work_dir=str(tmp_path))
-    module.advance_window(0.0, 0.1)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.1))
 
-    outputs = module.get_outputs()
     assert _signal_value(outputs["run_metadata"])["status"] == "error"
     assert "protein_path" in _signal_value(outputs["run_metadata"])["error"]
     assert module.visualize() is None
@@ -92,9 +92,9 @@ def test_run_options_validation_rejects_unknown_keys(biosim, tmp_path):
         ligand_description="COc(cc1)ccc1C#N",
         run_options={"not_supported": 1},
     )
-    module.advance_window(0.0, 0.1)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.1))
 
-    metadata = _signal_value(module.get_outputs()["run_metadata"])
+    metadata = _signal_value(outputs["run_metadata"])
     assert metadata["status"] == "error"
     assert "unsupported run_options key" in metadata["error"]
 
@@ -159,9 +159,8 @@ def test_managed_runtime_bootstraps_and_parses_outputs(biosim, tmp_path, monkeyp
             "save_visualisation": True,
         },
     )
-    module.advance_window(0.0, 0.5)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.5))
 
-    outputs = module.get_outputs()
     metadata = _signal_value(outputs["run_metadata"])
     pose_summary = _signal_value(outputs["pose_summary"])
     confidence = _signal_value(outputs["confidence_summary"])
@@ -220,7 +219,7 @@ def test_generated_structure_paths_remain_absolute_without_canonicalizing(biosim
     assert artifacts["rank_1_file"] == str(top_pose_path)
     assert "/../" in artifacts["prediction_dir"]
 
-    module._cached_payloads = {
+    module._output_payloads = {
         "run_metadata": {"status": "completed"},
         "structure_artifacts": artifacts,
         "confidence_summary": {"top_pose_confidence": 0.16, "confidence_band": "high", "pose_count": 1},
@@ -280,7 +279,7 @@ def test_advance_emits_progress_events_for_long_steps(biosim, tmp_path, monkeypa
         ligand_description="COc(cc1)ccc1C#N",
     )
 
-    module.advance_window(0.0, 0.5)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.5))
     captured = capsys.readouterr().out.splitlines()
     progress_events = [
         json.loads(line.removeprefix("BSIM_PROGRESS:"))
@@ -328,9 +327,9 @@ def test_subprocess_failure_surfaces_metadata(biosim, tmp_path, monkeypatch):
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_window(0.0, 0.5)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.5))
 
-    metadata = _signal_value(module.get_outputs()["run_metadata"])
+    metadata = _signal_value(outputs["run_metadata"])
     assert metadata["status"] == "error"
     assert metadata["returncode"] == 3
     assert "non-zero" in metadata["error"]
@@ -373,14 +372,14 @@ def test_missing_expected_files_becomes_error(biosim, tmp_path, monkeypatch):
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_window(0.0, 0.5)
+    outputs = module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN, run_start=0.0, run_end=0.5))
 
-    metadata = _signal_value(module.get_outputs()["run_metadata"])
+    metadata = _signal_value(outputs["run_metadata"])
     assert metadata["status"] == "error"
     assert "expected DiffDock outputs" in metadata["error"]
 
 
-def test_repeat_advance_does_not_rerun_until_reset(biosim, tmp_path, monkeypatch):
+def test_bioworld_invokes_predictor_once_per_run(biosim, tmp_path, monkeypatch):
     from src.diffdockl_docking_predictor import DiffDockLDockingPredictor
     from biosim.signals import BioSignal
 
@@ -430,18 +429,12 @@ def test_repeat_advance_does_not_rerun_until_reset(biosim, tmp_path, monkeypatch
         protein_path="data/1a0q/1a0q_protein_processed.pdb",
         ligand_description="COc(cc1)ccc1C#N",
     )
-    module.advance_window(0.0, 0.2)
-    module.advance_window(0.0, 0.3)
+    world = biosim.BioWorld(communication_step=0.1)
+    world.add_biomodule("predictor", module)
+    world.run(duration=0.3)
     assert calls["predict"] == 1
 
-    module.reset()
-    _set_required_inputs(
-        module,
-        BioSignal,
-        protein_path="data/1a0q/1a0q_protein_processed.pdb",
-        ligand_description="COc(cc1)ccc1C#N",
-    )
-    module.advance_window(0.0, 0.4)
+    world.run(duration=0.1)
     assert calls["predict"] == 2
 
 
@@ -594,5 +587,4 @@ def _generic_input_spec(description=None):
         ),
         description=description,
     )
-
 

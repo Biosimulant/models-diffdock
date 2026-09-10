@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from biosim import ExecutionContext, ExecutionPolicy
 from biosim.signals import unwrap_payload as _signal_value
 from biosim.signals import make_signal as _make_signal
 
@@ -73,11 +74,15 @@ def main() -> int:
         name: _make_signal(source="example", name=name, value=value, emitted_at=0.0, spec=None)
         for name, value in (model_cfg.get("inputs") or {}).items()
     }
-    if inputs:
-        module.set_inputs(inputs)
-
-    module.advance_window(0.0, 0.01)
-    outputs = {name: signal.to_dict() for name, signal in module.get_outputs().items()}
+    result = module.execute(
+        inputs,
+        context=ExecutionContext(
+            policy=ExecutionPolicy.ONCE_BEFORE_RUN,
+            run_start=0.0,
+            run_end=0.01,
+        ),
+    )
+    outputs = {name: signal.to_dict() for name, signal in result.items()}
 
     payload = {
         "example": config.get("example_name", args.example),
@@ -120,5 +125,4 @@ def _generic_input_spec(description=None):
         ),
         description=description,
     )
-
 
