@@ -4,7 +4,7 @@ default_visibility: public
 packages:
   - id: diffdock-diffdockl-docking-predictor-lab
     package: diffdock-diffdockl-docking-predictor
-    version: 1.0.0
+    version: 1.0.1
     type: lab
     path: labs/diffdock-diffdockl-docking-predictor
     visibility: public

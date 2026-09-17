@@ -41,7 +41,7 @@ jobs:
       - name: Install validation dependencies
         run: |
           pip install pyyaml
-          pip install "biosimulant==0.0.26"
+          pip install "biosimulant==0.0.33"
       - name: Validate manifest schema
         run: |
           for lab in labs/*; do
@@ -66,7 +66,7 @@ jobs:
       - name: Install validation dependencies
         run: |
           pip install pyyaml
-          pip install "biosimulant==0.0.26"
+          pip install "biosimulant==0.0.33"
       - name: Smoke run checks (sandbox-compatible image)
         run: |
           output_dir="$(mktemp -d)"
