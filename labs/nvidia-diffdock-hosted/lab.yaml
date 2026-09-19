@@ -1,0 +1,67 @@
+schema_version: "2.0"
+package: nvidia-diffdock-hosted
+version: "0.1.0"
+title: NVIDIA-hosted DiffDock
+description: One individually authored Lab invokes NVIDIA DiffDock with identified receptor and ligand inputs and declared terminal outputs. Research qualification pending.
+models:
+  - alias: main
+    path: owned/models/main
+runtime:
+  python_version: "3.10"
+  duration: 1.0
+  communication_step: 1.0
+  initial_inputs: {}
+wiring: []
+io:
+  inputs:
+    - name: receptor
+      label: Prepared receptor
+      maps_to: main.receptor
+      value_type: record
+      format: json
+      required: true
+      description: Explicit receptor_id, protein-only pdb_text and preparation object.
+    - name: ligand
+      label: Ligand
+      maps_to: main.ligand
+      value_type: record
+      format: json
+      required: true
+      description: Explicit ligand_id, single-molecule sdf_text and preparation object.
+    - name: run_options
+      label: Inference options
+      maps_to: main.run_options
+      value_type: record
+      format: json
+      required: false
+      default: {parameters: {}}
+      description: Documented pose and diffusion controls; no biological time axis or invented seed.
+  outputs:
+    - name: docking_poses
+      label: Docking poses
+      maps_to: main.docking_poses
+      description: All returned SDF poses with receptor frame and heavy-atom mappings.
+    - name: pose_confidence
+      label: Native confidence
+      maps_to: main.pose_confidence
+      description: Native confidence per pose, not affinity or binding probability.
+    - name: run_provenance
+      label: Run provenance
+      maps_to: main.run_provenance
+      description: Exact inputs, safe provider identity, artifact digests and backend identity gaps.
+    - name: native_response
+      label: Original response
+      maps_to: main.native_response
+      description: Original JSON text for independently checked capture.
+intended_use:
+  statement: Research generation of candidate ligand poses against an explicitly prepared protein receptor using NVIDIA-hosted DiffDock.
+caveats:
+  - Native API reference exercised; managed execution and secure Hub key provisioning are unverified.
+  - Exact hosted checkpoint, image, GPU and seed identities remain unknown.
+  - Protein-only preparation excludes cofactors; users must explicitly choose and justify preparation.
+  - Output may remove hydrogens. Heavy-atom chemical identity is checked, not full atom-index preservation.
+  - Scientific benchmark thresholds and independent domain qualification remain unresolved.
+prohibited_claims:
+  - Clinical, diagnostic, regulatory or therapeutic efficacy claims.
+  - Confidence as measured affinity or calibrated binding probability.
+  - Universal docking accuracy or exact self-hosted checkpoint equivalence.

@@ -1,0 +1,75 @@
+schema_version: "2.0"
+package: nvidia-diffdock-hosted-core
+version: "0.1.0"
+title: NVIDIA-hosted DiffDock
+description: Research ligand docking through NVIDIA with explicit input identities, portable poses and native confidence. Qualification pending.
+standard: other
+biosim:
+  entrypoint: model:NvidiaDiffDock
+  communication_step: 1.0
+  execution_policy: once_before_run
+runtime:
+  python_version: "3.10"
+  dependencies:
+    packages:
+      - biosimulant==0.0.34
+      - httpx==0.28.1
+      - biopython==1.84
+      - rdkit==2025.3.3
+      - pyyaml==6.0.2
+      - pytest==8.3.5
+parameters:
+  - name: observation_timeout_s
+    value: 240.0
+    description: Maximum client observation seconds. Timeout does not establish provider cancellation.
+  - name: max_response_bytes
+    value: 5000000
+    description: Maximum decoded response size in bytes.
+  - name: resume_request_id
+    value: null
+    description: Existing NVIDIA request UUID to observe without another POST.
+  - name: resume_request_sha256
+    value: null
+    description: Original canonical request digest required to resume.
+io:
+  inputs:
+    - name: receptor
+      signal_type: record
+      schema: {receptor_id: str, pdb_text: str, preparation: json}
+      accepted_units: ["1"]
+      required: true
+      description: Identified explicitly prepared protein-only PDB. Coordinates angstrom; preparation is recorded, not silently performed.
+    - name: ligand
+      signal_type: record
+      schema: {ligand_id: str, sdf_text: str, preparation: json}
+      accepted_units: ["1"]
+      required: true
+      description: One identified SDF ligand with explicit chemical preparation and input atom indices.
+    - name: run_options
+      signal_type: record
+      schema: {parameters: json}
+      accepted_units: ["1"]
+      required: false
+      default: {parameters: {}}
+      description: Allowlisted documented options. Initial mode requires trajectory, staged and skip-conformer flags false. No seed supported.
+  outputs:
+    - name: docking_poses
+      signal_type: record
+      schema: {receptor_id: str, ligand_id: str, poses: json, coordinate_unit: str, request_sha256: str}
+      emitted_unit: angstrom
+      description: All native SDF pose coordinates in the receptor frame with byte/hash metadata and heavy-atom maps. No inferred accuracy.
+    - name: pose_confidence
+      signal_type: record
+      schema: {ligand_id: str, items: json, score_semantics: str, request_sha256: str}
+      emitted_unit: "1"
+      description: Native unitless scores with exact source pose IDs. No probability, affinity or confidence-band conversion.
+    - name: run_provenance
+      signal_type: record
+      schema: {request: json, provider: json, inputs: json, environment: json, limitations: json}
+      emitted_unit: "1"
+      description: Mixed operational report with safe provider ID, request/response hashes, input preparation and explicit unknown backend identities.
+    - name: native_response
+      signal_type: scalar
+      dtype: str
+      emitted_unit: "1"
+      description: Exact UTF-8 JSON response retained for independent artifact checks.
