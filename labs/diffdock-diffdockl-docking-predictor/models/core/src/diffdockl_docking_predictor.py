@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -16,6 +17,9 @@ import tempfile
 import textwrap
 import threading
 import time
+import urllib.request
+import zipfile
+import yaml
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Optional
@@ -36,12 +40,14 @@ _ALLOWED_RUN_OPTIONS = {
 _PIP_OPTION_FLAGS = {"--extra-index-url", "--find-links"}
 _PREINSTALL_PACKAGE_NAMES = {"setuptools", "torch"}
 _PATH_LIKE_SUFFIXES = {".pdb", ".sdf", ".mol2", ".mol", ".pdbqt"}
+_UPSTREAM_COMMIT = "9a22cbcbc7612c7565c80e8399d9be298971f156"
 _POSE_FILE_RE = re.compile(
     r"^rank(?P<rank>\d+)(?:_confidence(?P<confidence>[-+]?\d+(?:\.\d+)?))?\.sdf$"
 )
 _RDKIT_SDF_TO_PDB_JSON_SCRIPT = textwrap.dedent(
     """
     import json
+    import math
     import sys
     from rdkit import Chem
 
@@ -62,6 +68,8 @@ _RDKIT_SDF_TO_PDB_JSON_SCRIPT = textwrap.dedent(
         x = float(raw[30:38])
         y = float(raw[38:46])
         z = float(raw[46:54])
+        if not all(math.isfinite(value) for value in (x, y, z)):
+            raise RuntimeError("ligand pose contains non-finite coordinates")
         lines.append(
             f"HETATM{serial:5d} {atom_name:>4} LIG Z{1:4d}    "
             f"{x:8.3f}{y:8.3f}{z:8.3f}{1.00:6.2f}{0.00:6.2f}          {element:>2}"
@@ -114,12 +122,15 @@ def _coerce_string(value: Any, *preferred_keys: str) -> Optional[str]:
 
 
 def _coerce_run_options(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
+    if value is None:
         return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("run_options must be a mapping")
     out: dict[str, Any] = {}
     for key, item in value.items():
-        if isinstance(key, str):
-            out[key] = item
+        if not isinstance(key, str):
+            raise ValueError("run_options keys must be strings")
+        out[key] = item
     return out
 
 
@@ -163,6 +174,7 @@ class DiffDockLDockingPredictor(BioModule):
         requirements_file: Optional[str] = None,
         diffdock_repo_url: str = "https://github.com/gcorso/DiffDock.git",
         diffdock_git_ref: str = "v1.1.3",
+        diffdock_git_commit: str = _UPSTREAM_COMMIT,
         work_dir: Optional[str] = None,
         cache_dir: Optional[str] = None,
         command_timeout_s: float = 10_800.0,
@@ -172,9 +184,19 @@ class DiffDockLDockingPredictor(BioModule):
     ) -> None:
         self.integration_step = float(integration_step)
         self.runtime_mode = runtime_mode
+        if not isinstance(runtime_mode, str) or runtime_mode.strip().lower() not in {"managed", "external"}:
+            raise ValueError("runtime_mode must be managed or external")
         self.runtime_python = runtime_python
         self.diffdock_repo_url = diffdock_repo_url
         self.diffdock_git_ref = diffdock_git_ref
+        if not re.fullmatch(r"[0-9a-f]{40}", diffdock_git_commit):
+            raise ValueError("diffdock_git_commit must be an exact 40-character commit hash")
+        self.diffdock_git_commit = diffdock_git_commit
+        for name, value in (("command_timeout_s", command_timeout_s),
+                            ("runtime_setup_timeout_s", runtime_setup_timeout_s),
+                            ("progress_heartbeat_s", progress_heartbeat_s)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or (name != "progress_heartbeat_s" and value == 0):
+                raise ValueError(f"{name} must be finite and {'nonnegative' if name == 'progress_heartbeat_s' else 'positive'}")
         self.command_timeout_s = command_timeout_s
         self.runtime_setup_timeout_s = runtime_setup_timeout_s
         self.progress_heartbeat_s = max(0.0, float(progress_heartbeat_s))
@@ -202,7 +224,8 @@ class DiffDockLDockingPredictor(BioModule):
         self._ligand_description: Optional[str] = _coerce_string(
             default_ligand_description, "path", "smiles", "description"
         )
-        self._run_options: dict[str, Any] = _coerce_run_options(default_run_options)
+        self._default_run_options = _coerce_run_options(default_run_options)
+        self._run_options: dict[str, Any] = dict(self._default_run_options)
         self._outputs: dict[str, BioSignal] = {}
         self._output_payloads: dict[str, Any] = {}
 
@@ -242,7 +265,7 @@ class DiffDockLDockingPredictor(BioModule):
         run_signal = signals.get("run_options")
         if run_signal is not None:
             run_options = _coerce_run_options(_signal_value(run_signal))
-            self._run_options = run_options
+            self._run_options = {**self._default_run_options, **run_options}
 
     def execute(self, inputs: Mapping[str, BioSignal], *, context: ExecutionContext) -> Mapping[str, BioSignal]:
         self.set_inputs(dict(inputs))
@@ -286,6 +309,12 @@ class DiffDockLDockingPredictor(BioModule):
         metadata["output_dir"] = str(output_dir)
         metadata["protein_path"] = protein_path
         metadata["ligand_description"] = ligand_input["value"]
+        metadata["resolved_options"] = resolved_options
+        metadata["input_sha256"] = {
+            "protein": self._file_sha256(Path(protein_path)),
+            "ligand": self._file_sha256(Path(ligand_input["value"])) if ligand_input["kind"] == "path" else hashlib.sha256(ligand_input["value"].encode()).hexdigest(),
+        }
+        metadata["ligand_input_kind"] = ligand_input["kind"]
 
         try:
             self._emit_progress("runtime", "Preparing DiffDock runtime")
@@ -303,6 +332,9 @@ class DiffDockLDockingPredictor(BioModule):
             metadata["model_dir"] = str(runtime["model_dir"])
             metadata["confidence_model_dir"] = str(runtime["confidence_model_dir"])
             metadata["command"] = command
+            effective_config = Path(command[command.index("--config") + 1])
+            metadata["effective_config"] = yaml.safe_load(effective_config.read_text())
+            metadata["effective_config_sha256"] = self._file_sha256(effective_config)
 
             completed = self._run_command_with_progress(
                 command=command,
@@ -338,6 +370,8 @@ class DiffDockLDockingPredictor(BioModule):
             prediction_dir = self._find_prediction_dir(output_dir, resolved_options["complex_name"])
             pose_records, top_pose_path, reverseprocess_files = self._collect_pose_records(prediction_dir)
             confidence_summary = self._build_confidence_summary(pose_records)
+            if len(pose_records) != resolved_options["samples_per_complex"]:
+                raise ValueError("returned pose count differs from requested samples_per_complex")
             pose_summary_file = prediction_dir / "pose_summary.json"
             confidence_file = prediction_dir / "confidence_summary.json"
             self._write_json(pose_summary_file, {"poses": pose_records})
@@ -370,6 +404,12 @@ class DiffDockLDockingPredictor(BioModule):
 
         metadata["status"] = "completed"
         metadata["prediction_dir"] = str(prediction_dir)
+        metadata["stochastic_inference"] = True
+        metadata["checkpoint_sha256"] = {
+            str(path.relative_to(runtime["repo_dir"])): self._file_sha256(path)
+            for folder in (runtime["model_dir"], runtime["confidence_model_dir"])
+            for path in Path(folder).glob("*") if path.is_file() and path.suffix in {".pt", ".yml", ".yaml"}
+        }
         self._output_payloads = {
             "pose_summary": pose_records,
             "confidence_summary": confidence_summary,
@@ -396,14 +436,14 @@ class DiffDockLDockingPredictor(BioModule):
 
         if "complex_name" in self._run_options:
             complex_name = _coerce_string(self._run_options.get("complex_name"))
-            if complex_name is None:
-                raise ValueError("run_options.complex_name must be a non-empty string")
+            if complex_name is None or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", complex_name):
+                raise ValueError("run_options.complex_name must be a safe name of 1–100 letters, digits, underscores, periods or hyphens")
             resolved["complex_name"] = complex_name
 
         for key in ("samples_per_complex", "inference_steps", "batch_size"):
             if key in self._run_options:
                 value = self._run_options.get(key)
-                if not isinstance(value, int) or value <= 0:
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                     raise ValueError(f"run_options.{key} must be a positive integer")
                 resolved[key] = value
 
@@ -428,6 +468,7 @@ class DiffDockLDockingPredictor(BioModule):
         return root.resolve()
 
     def _prepare_runtime(self, run_root: Path, metadata: dict[str, Any]) -> dict[str, Path | str]:
+        self._validate_runtime_platform()
         runtime_root = self.runtime_dir
         runtime_root.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -446,6 +487,8 @@ class DiffDockLDockingPredictor(BioModule):
         else:
             raise ValueError(f"unsupported runtime_mode: {self.runtime_mode}")
 
+        self._ensure_checkpoints(repo_dir, metadata)
+
         return {
             "repo_dir": repo_dir,
             "python_executable": python_executable,
@@ -453,9 +496,49 @@ class DiffDockLDockingPredictor(BioModule):
             "confidence_model_dir": repo_dir / "workdir" / "v1.1" / "confidence_model",
         }
 
+    def _ensure_checkpoints(self, repo_dir: Path, metadata: dict[str, Any]) -> None:
+        manifest = json.loads((self.model_root / "data/diffdock-checkpoints.json").read_text())
+        root = repo_dir / "workdir/v1.1"
+        expected = manifest["files"]
+        missing = []
+        for name, digest in expected.items():
+            path = root / name
+            if not path.is_file():
+                missing.append(name)
+            elif self._file_sha256(path) != digest:
+                raise RuntimeError(f"cached DiffDock checkpoint mismatch: {name}; use a clean runtime_dir")
+        if missing:
+            self._emit_progress("runtime", "Downloading pinned DiffDock v1.1 checkpoints")
+            root.mkdir(parents=True, exist_ok=True)
+            deadline = time.monotonic() + self.runtime_setup_timeout_s
+            with tempfile.TemporaryDirectory(prefix="checkpoint-", dir=root) as staging:
+                archive = Path(staging) / "models.zip"
+                with urllib.request.urlopen(manifest["source"], timeout=min(60.0, self.runtime_setup_timeout_s)) as response, archive.open("wb") as handle:
+                    total = 0
+                    while block := response.read(1024 * 1024):
+                        total += len(block)
+                        if total > manifest["bytes"] or time.monotonic() >= deadline:
+                            raise RuntimeError("checkpoint download exceeded its size or time bound")
+                        handle.write(block)
+                if archive.stat().st_size != manifest["bytes"] or self._file_sha256(archive) != manifest["sha256"]:
+                    raise RuntimeError("downloaded DiffDock checkpoint archive failed checksum verification")
+                with zipfile.ZipFile(archive) as bundle:
+                    for name in missing:
+                        data = bundle.read(name)
+                        if hashlib.sha256(data).hexdigest() != expected[name]:
+                            raise RuntimeError(f"checkpoint checksum mismatch: {name}")
+                        target = root / name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        temporary = Path(staging) / "verified-file"
+                        temporary.write_bytes(data)
+                        temporary.replace(target)
+        metadata["checkpoint_bundle_sha256"] = manifest["sha256"]
+        metadata["verified_checkpoint_sha256"] = expected
+
     def _ensure_repo_checkout(self, repo_dir: Path, run_root: Path, metadata: dict[str, Any]) -> None:
         if (repo_dir / ".git").is_dir():
             self._emit_progress("runtime", "Reusing cached DiffDock repository checkout")
+            self._verify_repo_checkout(repo_dir, metadata)
             return
         if repo_dir.exists():
             raise RuntimeError(f"runtime repo path exists but is not a git checkout: {repo_dir}")
@@ -479,6 +562,29 @@ class DiffDockLDockingPredictor(BioModule):
             completion_message="DiffDock repository checkout is ready",
         )
         metadata["repo_bootstrapped"] = True
+        self._verify_repo_checkout(repo_dir, metadata)
+
+    def _verify_repo_checkout(self, repo_dir: Path, metadata: dict[str, Any]) -> None:
+        revision = self._run_setup_command(["git", "rev-parse", "HEAD"], repo_dir, metadata).stdout.strip()
+        if revision != self.diffdock_git_commit:
+            raise RuntimeError(f"DiffDock checkout is {revision}; expected {self.diffdock_git_commit}. Use a separate runtime_dir for another revision.")
+        dirty = self._run_setup_command(["git", "status", "--porcelain", "--untracked-files=no"], repo_dir, metadata).stdout.strip()
+        if dirty:
+            raise RuntimeError("DiffDock checkout has modified tracked files")
+        metadata["upstream_commit"] = revision
+        metadata["requirements_sha256"] = self._file_sha256(self.requirements_file)
+
+    def _validate_runtime_platform(self) -> None:
+        if self.runtime_mode.strip().lower() == "managed" and (sys.platform != "linux" or sys.version_info[:2] != (3, 11)):
+            raise RuntimeError("Managed DiffDock requires Linux and Python 3.11 for its pinned CUDA/PyG wheels; use the GPU runner or an explicitly configured external environment")
+
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+        return digest.hexdigest()
 
     def _ensure_managed_runtime(
         self,
@@ -490,7 +596,7 @@ class DiffDockLDockingPredictor(BioModule):
         python_executable = venv_dir / "bin" / "python"
         ready_marker = venv_dir / ".ready"
         requirements_hash = hashlib.sha256(
-            (self.requirements_file.read_text(encoding="utf-8") + self.diffdock_git_ref).encode("utf-8")
+            (self.requirements_file.read_text(encoding="utf-8") + self.diffdock_git_commit + sys.version).encode("utf-8")
         ).hexdigest()[:16]
 
         if not python_executable.exists():
@@ -773,6 +879,7 @@ class DiffDockLDockingPredictor(BioModule):
             candidate = Path(self.runtime_python).expanduser()
             if candidate.is_file():
                 return str(candidate.resolve())
+            raise FileNotFoundError(f"external runtime_python does not exist: {candidate}")
         for name in ("python", "python3"):
             resolved = shutil.which(name)
             if resolved:
@@ -800,12 +907,29 @@ class DiffDockLDockingPredictor(BioModule):
         ligand_input: dict[str, str],
         options: dict[str, Any],
     ) -> list[str]:
+        # Upstream v1.1.3 applies YAML *after* argparse, overwriting CLI values.
+        # Persist the effective configuration so requested controls actually run.
+        config = yaml.safe_load((repo_dir / "default_inference_args.yaml").read_text())
+        if not isinstance(config, dict):
+            raise ValueError("upstream inference configuration must be a mapping")
+        config.update(options)
+        config.update({
+            "out_dir": str(output_dir.resolve()), "protein_path": protein_path,
+            "ligand_description": ligand_input["value"],
+            "model_dir": str((repo_dir / "workdir/v1.1/score_model").resolve()),
+            "confidence_model_dir": str((repo_dir / "workdir/v1.1/confidence_model").resolve()),
+            "ckpt": "best_ema_inference_epoch_model.pt", "confidence_ckpt": "best_model_epoch75.pt",
+            "actual_steps": min(int(config.get("actual_steps", 19)), options["inference_steps"]),
+        })
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        config_path = output_dir.parent / "effective_inference_args.yaml"
+        config_path.write_text(yaml.safe_dump(config, sort_keys=True))
         command = [
             python_executable,
             "-m",
             "inference",
             "--config",
-            str((repo_dir / "default_inference_args.yaml").resolve()),
+            str(config_path.resolve()),
             "--out_dir",
             str(output_dir.resolve()),
             "--complex_name",
@@ -858,7 +982,8 @@ class DiffDockLDockingPredictor(BioModule):
         return [(self.model_root / path).resolve(), (Path.cwd() / path).resolve()]
 
     def _looks_like_path(self, value: str) -> bool:
-        if value.startswith(".") or "/" in value or "\\" in value:
+        # Slash/backslash also encode alkene stereochemistry in valid SMILES.
+        if value.startswith(("/", "./", "../", "~")):
             return True
         return Path(value).suffix.lower() in _PATH_LIKE_SUFFIXES
 
@@ -866,12 +991,7 @@ class DiffDockLDockingPredictor(BioModule):
         direct = (output_dir / complex_name).resolve()
         if direct.is_dir():
             return direct
-        candidates = sorted(path for path in output_dir.rglob("rank1.sdf") if path.is_file())
-        if not candidates:
-            candidates = sorted(path for path in output_dir.rglob("rank1_confidence*.sdf") if path.is_file())
-        if not candidates:
-            raise FileNotFoundError(f"no DiffDock rank outputs found under {output_dir}")
-        return candidates[0].parent.resolve()
+        raise FileNotFoundError(f"no DiffDock output for requested complex {complex_name}")
 
     def _collect_pose_records(
         self,
@@ -884,13 +1004,18 @@ class DiffDockLDockingPredictor(BioModule):
         for path in sorted(prediction_dir.glob("rank*.sdf")):
             match = _POSE_FILE_RE.match(path.name)
             if match is None:
-                continue
+                raise ValueError(f"malformed pose rank or confidence: {path.name}")
             rank = int(match.group("rank"))
+            if rank < 1 or path.stat().st_size == 0:
+                raise ValueError(f"invalid or empty pose: {path.name}")
             confidence_raw = match.group("confidence")
             if confidence_raw is None:
                 stable_pose_files[rank] = path.resolve()
                 continue
-            ranked_pose_files[rank] = (path.resolve(), float(confidence_raw))
+            confidence = float(confidence_raw)
+            if not math.isfinite(confidence) or rank in ranked_pose_files:
+                raise ValueError(f"invalid or duplicate ranked confidence: {path.name}")
+            ranked_pose_files[rank] = (path.resolve(), confidence)
 
         for path in sorted(prediction_dir.glob("rank*_reverseprocess.pdb")):
             name = path.stem.split("_", 1)[0]
@@ -905,6 +1030,8 @@ class DiffDockLDockingPredictor(BioModule):
         ranks = sorted(set(stable_pose_files) | set(ranked_pose_files))
         if not ranks:
             raise FileNotFoundError(f"no DiffDock pose files found under {prediction_dir}")
+        if ranks != list(range(1, len(ranks) + 1)) or set(ranks) != set(ranked_pose_files):
+            raise ValueError("expected contiguous ranks starting at 1, each with a finite confidence")
 
         pose_records: list[dict[str, Any]] = []
         top_pose_path: Optional[Path] = None
@@ -915,7 +1042,7 @@ class DiffDockLDockingPredictor(BioModule):
             if file_path is None:
                 continue
             if rank == 1:
-                top_pose_path = stable_path or ranked_path
+                top_pose_path = ranked_path
             pose_records.append(
                 {
                     "rank": rank,
@@ -942,6 +1069,7 @@ class DiffDockLDockingPredictor(BioModule):
             "confidence_band": top.get("confidence_band"),
             "pose_count": len(pose_records),
             "all_confidences": confidences,
+            "interpretation": "Raw pose-confidence score within this complex; not a binding affinity or calibrated probability. Bands are upstream heuristics.",
         }
 
     def _build_structure_artifacts(
@@ -1023,6 +1151,8 @@ class DiffDockLDockingPredictor(BioModule):
             x = float(raw[30:38])
             y = float(raw[38:46])
             z = float(raw[46:54])
+            if not all(math.isfinite(value) for value in (x, y, z)):
+                raise RuntimeError("ligand pose contains non-finite coordinates")
             lines.append(
                 f"HETATM{serial:5d} {atom_name:>4} LIG Z{1:4d}    "
                 f"{x:8.3f}{y:8.3f}{z:8.3f}{1.00:6.2f}{0.00:6.2f}          {element:>2}"
@@ -1095,7 +1225,7 @@ class DiffDockLDockingPredictor(BioModule):
             self._outputs[name] = _make_signal(source="diffdock", name=name, value=self._output_payloads.get(name, {}), emitted_at=t, spec=self.outputs().get(name))
 
     def _confidence_band(self, value: Any) -> str:
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             return "unknown"
         if value > 0:
             return "high"

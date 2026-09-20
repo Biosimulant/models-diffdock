@@ -208,7 +208,7 @@ class DockingVisualisationModel(BioModule):
             },
             {
                 "render": "table",
-                "description": "Ranked pose summary from the latest DiffDock-L run.",
+                "description": "Raw pose-confidence ranking within this complex. Scores are not binding affinity or calibrated probabilities; bands are upstream heuristics.",
                 "data": {"title": "DiffDock Pose Summary", "columns": ["Rank", "Confidence", "Band", "Pose File"], "rows": rows},
             },
         ]

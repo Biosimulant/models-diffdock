@@ -13,13 +13,6 @@ from biosim.signals import unwrap_payload as _signal_value
 from biosim.signals import make_signal as _make_signal
 
 
-def _load_biosim_repo_paths(root: Path) -> None:
-    monorepo = root.parents[2]
-    biosim_src = monorepo / "biosim" / "src"
-    if str(biosim_src) not in sys.path:
-        sys.path.insert(0, str(biosim_src))
-
-
 def _load_config(config_path: Path) -> dict:
     loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(loaded, dict):
@@ -29,7 +22,6 @@ def _load_config(config_path: Path) -> dict:
 
 def main() -> int:
     root = Path(__file__).resolve().parent
-    _load_biosim_repo_paths(root)
 
     parser = argparse.ArgumentParser(description="Run a real models-diffdock example directly.")
     parser.add_argument(

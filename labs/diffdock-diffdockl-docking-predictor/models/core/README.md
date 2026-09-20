@@ -51,3 +51,10 @@ single-complex sample:
 The example configs keep using the official sample CSV SMILES entry because it
 exercises the most portable remote path, but the wrapper also accepts the
 checked-in ligand file directly.
+
+## Version 1.1.0 contract
+
+See the [Lab research status and controls](../../README.md) for the current
+validation boundary, pinned source/checkpoints and score interpretation. Cached
+source and weights are verified on every run. Requested controls are written to
+an effective YAML because upstream YAML overrides command-line arguments.

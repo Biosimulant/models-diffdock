@@ -28,6 +28,10 @@ def _set_required_inputs(module, BioSignal, *, protein_path: str | None = None, 
 
 def _patch_invoke_command(monkeypatch, predictor_cls, handler):
     def fake_invoke(self, command, *, cwd, timeout, env, phase):
+        if command[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(command, 0, stdout="9a22cbcbc7612c7565c80e8399d9be298971f156", stderr="")
+        if command[:2] == ["git", "status"]:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         return handler(
             [str(item) for item in command],
             cwd=cwd,
@@ -37,6 +41,8 @@ def _patch_invoke_command(monkeypatch, predictor_cls, handler):
         )
 
     monkeypatch.setattr(predictor_cls, "_invoke_command", fake_invoke)
+    monkeypatch.setattr(predictor_cls, "_validate_runtime_platform", lambda self: None)
+    monkeypatch.setattr(predictor_cls, "_ensure_checkpoints", lambda self, repo, metadata: None)
 
 
 def test_instantiation(biosim, tmp_path):
@@ -128,6 +134,8 @@ def test_managed_runtime_bootstraps_and_parses_outputs(biosim, tmp_path, monkeyp
             prediction_dir.mkdir(parents=True, exist_ok=True)
             (prediction_dir / "rank1.sdf").write_text("rank1", encoding="utf-8")
             (prediction_dir / "rank1_confidence0.72.sdf").write_text("rank1-c", encoding="utf-8")
+            for rank in range(2, int(command[command.index("--samples_per_complex") + 1]) + 1):
+                (prediction_dir / f"rank{rank}_confidence-0.45.sdf").write_text("mock pose", encoding="utf-8")
             (prediction_dir / "rank2_confidence-0.45.sdf").write_text("rank2-c", encoding="utf-8")
             (prediction_dir / "rank1_reverseprocess.pdb").write_text("MODEL\nENDMDL\n", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
@@ -255,6 +263,8 @@ def test_advance_emits_progress_events_for_long_steps(biosim, tmp_path, monkeypa
             prediction_dir.mkdir(parents=True, exist_ok=True)
             (prediction_dir / "rank1.sdf").write_text("rank1", encoding="utf-8")
             (prediction_dir / "rank1_confidence0.72.sdf").write_text("rank1-c", encoding="utf-8")
+            for rank in range(2, int(command[command.index("--samples_per_complex") + 1]) + 1):
+                (prediction_dir / f"rank{rank}_confidence-0.45.sdf").write_text("mock pose", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
         raise AssertionError(f"Unexpected command: {command}")
 
@@ -407,6 +417,8 @@ def test_bioworld_invokes_predictor_once_per_run(biosim, tmp_path, monkeypatch):
             prediction_dir.mkdir(parents=True, exist_ok=True)
             (prediction_dir / "rank1.sdf").write_text("rank1", encoding="utf-8")
             (prediction_dir / "rank1_confidence0.72.sdf").write_text("rank1-c", encoding="utf-8")
+            for rank in range(2, int(command[command.index("--samples_per_complex") + 1]) + 1):
+                (prediction_dir / f"rank{rank}_confidence-0.45.sdf").write_text("mock pose", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
         raise AssertionError(f"Unexpected command: {command}")
 

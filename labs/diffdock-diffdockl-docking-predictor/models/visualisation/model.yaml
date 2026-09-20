@@ -1,26 +1,49 @@
-schema_version: "2.0"
-title: "DiffDock-L Visualisation"
-description: "Dedicated presentation model for this docking lab."
+schema_version: '2.0'
+title: DiffDock-L Visualisation
+description: Dedicated presentation model for this docking lab.
 standard: other
 tags:
-  - docking
-  - visualisation
+- docking
+- visualisation
 authors:
-  - "Biosimulant Team"
+- Biosimulant Team
 biosim:
-  entrypoint: "src.docking_visualisation:DockingVisualisationModel"
+  entrypoint: src.docking_visualisation:DockingVisualisationModel
   init_kwargs:
     integration_step: 0.01
-    source_alias: "diffdock_diffdockl_docking_predictor"
-    mode: "diffdock"
-    lab_title: "DiffDock-L Visualisation"
+    source_alias: diffdock_diffdockl_docking_predictor
+    mode: diffdock
+    lab_title: DiffDock-L Visualisation
   communication_step: 0.01
-  execution_policy: "once_before_run"
+  execution_policy: once_before_run
 parameters:
-  - name: integration_step
-    value: 0.01
-    min: 0.0
-    description: "Sampling step for the visualisation model."
+- name: integration_step
+  value: 0.01
+  min: 0.0
+  description: Sampling step for the visualisation model.
 io:
-  inputs: []
+  inputs:
+  - name: diffdock_diffdockl_docking_predictor_pose_summary
+    signal_type: record
+    schema:
+      payload: json
+  - name: diffdock_diffdockl_docking_predictor_confidence_summary
+    signal_type: record
+    schema:
+      payload: json
+  - name: diffdock_diffdockl_docking_predictor_structure_artifacts
+    signal_type: record
+    schema:
+      payload: json
+  - name: diffdock_diffdockl_docking_predictor_run_metadata
+    signal_type: record
+    schema:
+      payload: json
   outputs: []
+version: 1.1.0
+runtime:
+  python_version: '3.11'
+  dependencies:
+    packages:
+    - biosimulant==0.0.34
+    - pyyaml==6.0.2
