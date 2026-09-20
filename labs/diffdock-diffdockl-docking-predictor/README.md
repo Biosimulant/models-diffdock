@@ -1,79 +1,92 @@
-# DiffDock: DiffDockLDockingPredictor Lab
+# DiffDock-L single-complex pose exploration
 
-This lab runs a single DiffDock-L docking job for one prepared receptor PDB and one ligand. The ligand can be a SMILES string or a path to an RDKit-readable ligand file (`.sdf`, `.mol`, `.mol2`, `.pdb`, `.pdbqt`). The lab ships with the bundled `1a0q` receptor and a SMILES ligand so a fresh run produces ranked poses, a confidence summary, and a merged top-ranked complex without any extra setup.
+This Lab generates candidate ligand poses for one prepared receptor PDB and one
+ligand (SMILES or a supported molecular file). It reports a within-complex pose
+ranking and inspectable SDF/PDB artifacts. It does not predict binding affinity,
+provide calibrated binding probabilities, prepare raw receptors, or establish
+experimental activity.
 
-The wrapper boots upstream DiffDock-L `v1.1.3` in managed runtime mode: it clones the pinned DiffDock repository, creates a venv from `model/requirements/runtime-gpu.txt`, and runs DiffDock inference from that managed environment. Subsequent runs reuse the cached repo and venv.
+## Research status
 
-This lab is for single-complex docking only. It does not prepare receptors from raw PDBs, run virtual-screening batches, or train DiffDock from scratch. Those belong in adjacent labs.
+Version 1.1.0 repairs the wrapper's controls and provenance. Local wrapper tests
+pass; a real run of this repaired version on Linux/NVIDIA GPU is still required
+before research promotion. The bundled 1a0q receptor and example SMILES are a
+small execution example, not independent docking-accuracy validation. Historical
+screenshots in `assets/` predate this repair and are not its validation evidence.
 
-## What You'll See
+## Inputs and controls
 
-The lab opens as a small canvas with one DiffDock-L docking node and a run-results panel. With the bundled defaults, the run produces:
+- `protein_path`: prepared receptor PDB; defaults to
+  `data/1a0q/1a0q_protein_processed.pdb` relative to `models/core`.
+- `ligand_description`: SMILES (including slash/backslash stereochemistry) or a
+  supported ligand file. The example uses `COc(cc1)ccc1C#N`.
+- `run_options`: a mapping merged onto the Lab preset. `complex_name` is a safe
+  output name; `samples_per_complex`, `inference_steps`, and `batch_size` are
+  positive integers; `save_visualisation` is boolean. Unknown keys are errors.
 
-- a ranked pose table sorted by DiffDock confidence,
-- a structure3d view of the top-ranked pose merged onto the receptor,
-- a confidence summary with the top pose score and confidence band,
-- run metadata with the executed command, returncode, and truncated stdout/stderr.
+The Lab preset requests two samples, four inference steps, and batch size two.
+These low sampling settings are for smoke testing. Upstream defaults otherwise
+use ten samples and twenty steps. Sampling is stochastic; repeated runs are not
+claimed to be byte-identical.
 
-The first screenshot shows the canvas, node inputs and outputs, and the structure3d view for the top-ranked docked complex. The second scrolls down to the artifact details and ranked pose table for the same run, where the bundled `1a0q` job reports 10 poses and a top confidence of `-2.23` in the `low` band.
+Upstream v1.1.3 loads YAML after command-line arguments. This wrapper writes one
+`effective_inference_args.yaml` per run with the requested options and absolute
+input/output/checkpoint paths, preventing YAML from silently restoring defaults.
+`actual_steps` is the smaller of the upstream value (19) and requested inference
+steps; all other upstream diffusion settings are preserved. The full effective
+configuration and its checksum are included in run metadata.
 
-![DiffDock-L lab canvas with top-ranked docked complex structure view](assets/diffdockl-docking-top-ranked-complex.png)
+## Runtime and reproducibility
 
-![DiffDock-L artifact details and ranked pose confidence table](assets/diffdockl-docking-pose-summary.png)
+Managed execution requires Linux and Python 3.11 for the pinned Torch 2.0.1/CUDA
+11.7/PyG wheels. The manifest requests one NVIDIA GPU and Biosimulant 0.0.34.
+Unsupported managed hosts fail before installing dependencies. External mode
+requires a separately prepared compatible environment; an explicitly supplied
+missing interpreter is an error.
 
-## How to Read the Visualizations
+Source is pinned to DiffDock v1.1.3 commit
+`9a22cbcbc7612c7565c80e8399d9be298971f156`. Every new or reused checkout must match
+and have no modified tracked files. The official v1.1 checkpoint archive is
+pinned by SHA-256 (`5a95b6a1555be47ab1d6f0a8ffd25152f7fe32f5956005bb821e13e7a37d4a3d`),
+as are its four checkpoint/parameter files in
+`models/core/data/diffdock-checkpoints.json`. Modified caches fail closed.
+Source/weights are MIT licensed by upstream. First execution needs network access
+for source, dependencies, these checkpoints and ESM assets; offline readiness
+requires all relevant caches and has not been established for this repair.
 
-The pose ranking table lists each DiffDock pose with its rank, confidence score, confidence band, and the underlying SDF filename. DiffDock-L confidences are unitless log-likelihood-style scores: positive values are mapped to the `high` band, scores between `0` and `-1.5` to `moderate`, and scores below `-1.5` to `low`. Use the band as a quick read on whether the top pose is worth following up.
+Input hashes, source revision, requirements hash, effective configuration,
+checkpoint hashes, command, logs and explicit status accompany each result.
+Transitive dependencies and ESM downloads are not fully locked by this wrapper;
+a release-grade run must also record its actual environment and ESM artifacts.
 
-The structure3d view shows the receptor with the top-ranked ligand pose merged in as `top_rank_complex.pdb`. Use it to sanity-check that the ligand sits inside a plausible binding pocket. If the ligand sits outside the receptor surface, treat the run as low-confidence regardless of the score.
+## Reading results
 
-The confidence summary captures the top pose rank, its confidence, the confidence band, the total pose count, and every per-pose confidence so you can spot bimodal pose distributions. In the shown default run, all 10 poses are in the `low` band, so the result is best read as a structural smoke test and not as a high-confidence binding prediction. The run metadata reports which runtime mode executed, where the managed runtime cached the DiffDock checkout and venv, the resolved inference command, the returncode, the truncated stdout/stderr from DiffDock, and `status: completed` or `status: error` so a failed run is still inspectable.
+`pose_summary` lists contiguous ranked poses and raw confidence scores. Positive
+scores use the upstream heuristic high band, scores above -1.5 through zero use
+moderate, and scores at or below -1.5 use low. These are heuristics, not calibrated
+probabilities. Comparisons across unrelated complexes or receptor conformations
+are not established. See [upstream interpretation](https://github.com/gcorso/DiffDock/tree/9a22cbcbc7612c7565c80e8399d9be298971f156#faq).
 
-## What This Lab Contains
+`confidence_summary` includes all scores and the interpretation limit.
+`structure_artifacts` contains the same ranked top pose used by the summary,
+merged with the receptor for visualization. `run_metadata.status` is completed
+only when the requested pose count, finite scores and expected artifacts are
+present. Missing, malformed or incomplete outputs produce explicit error status
+with empty scientific outputs. Inspect geometry and pursue independent physical
+and experimental checks before relying on a proposed pose.
 
-- `lab.yaml` describes the lab, exposes its inputs and outputs, and pins the bundled defaults.
-- `wiring-layout.json` places the model on the canvas.
-- `model/model.yaml` describes the model package, parameters, and ports.
-- `model/src/diffdockl_docking_predictor.py` contains the wrapper, managed runtime bootstrap, pose post-processing, and visualization shaping.
-- `model/requirements/runtime-gpu.txt` pins the torch and PyG stack installed into the managed venv.
-- `model/data/1a0q/` ships the receptor PDB and reference ligand SDF used by the bundled defaults.
-- `model/tests/` checks the wrapper, runtime bootstrap, output parsing, and visualization contract.
+The core and presenter execute once before each BioWorld run, with dependencies
+drained by Biosimulant's execution policy.
 
-## Inputs
+## Local checks
 
-The model accepts three input signals. Each one falls back to the matching `default_*` parameter in `lab.yaml` when the signal is not wired, which is what makes the lab runnable out of the box.
+Install Biosimulant 0.0.34, PyYAML 6.0.2 and pytest in an isolated environment, then:
 
-- `protein_path` (path): receptor PDB file. Defaults to `data/1a0q/1a0q_protein_processed.pdb`.
-- `ligand_description` (str or path): SMILES string or path to an RDKit-readable ligand file. Defaults to the SMILES `COc(cc1)ccc1C#N`.
-- `run_options` (record): DiffDock run options merged onto the bundled defaults.
-  - `complex_name` (str): output subdirectory name for the run.
-  - `samples_per_complex` (int): number of DiffDock samples to draw.
-  - `inference_steps` (int): denoising steps per sample.
-  - `batch_size` (int): inference batch size.
-  - `save_visualisation` (bool): whether to ask DiffDock to write per-step reverse-process PDBs.
-
-## Outputs
-
-- `pose_summary` (record): ranked poses with rank, confidence, confidence band, and per-pose SDF file path.
-- `confidence_summary` (record): aggregate confidence stats including `top_pose_confidence`, `confidence_band`, `pose_count`, and the full `all_confidences` list.
-- `structure_artifacts` (record): file-backed artifacts including the merged `top_rank_complex.pdb` consumed by the structure3d renderer, the top pose SDF, the confidence and pose summary JSON files, and per-rank SDF and reverseprocess PDB paths.
-- `run_metadata` (record): runtime metadata, runtime mode, runtime/cache directories, the executed command, returncode, truncated stdout/stderr, and `status: completed` or `status: error`.
-
-## Running in Biosimulant Desktop
-
-Import the lab once with the Biosim CLI, then open it from the desktop app. The bundled `1a0q` defaults mean the first run requires no parameter editing.
-
-```bash
-biosimulant labs import labs/diffdock-diffdockl-docking-predictor
+```sh
+python -m pytest labs/diffdock-diffdockl-docking-predictor -q
+biosimulant labs validate labs/diffdock-diffdockl-docking-predictor --json
+biosimulant labs package labs/diffdock-diffdockl-docking-predictor --out dist/ --visibility private
 ```
 
-To dock a different complex, override the inputs in the lab's run sidebar (or wire them to a source module that produces a receptor PDB path and a ligand SMILES or file). The model treats wired input signals as overrides on top of the defaults, so partial overrides work too.
-
-## Notes
-
-- The first real run needs internet access (to clone the upstream DiffDock repo and download model checkpoints) and a working `git` executable. Subsequent runs are offline.
-- DiffDock-L is GPU-friendly. CPU inference works for short smoke tests but is slow for production sample counts.
-- Managed runtime mode is required for remote execution. External mode (using a pre-installed DiffDock environment) is supported for local debugging via `runtime_mode: external` plus `runtime_python`.
-- DiffDock and its downstream visualization use `BioModule.execute()` with `ExecutionPolicy.ONCE_BEFORE_RUN`, so each runs exactly once per BioWorld run and the dependency chain drains without settle turns.
-- The existing `runtime.settle_steps: 1` field remains in the manifest for product compatibility; it does not determine the wrappers' invocation count.
-- `model/data/1a0q/` is shipped as part of the model package so the defaults resolve in remote runs too.
+The real smoke test is opt-in (`BIOSIM_DIFFDOCK_RUN_REAL_SMOKE=1`) on a supported
+runner. Mock wrapper checks do not establish scientific docking performance.

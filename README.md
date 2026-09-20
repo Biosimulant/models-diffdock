@@ -50,3 +50,10 @@ The DiffDock model uses the existing generic remote execution path:
 - the wrapper clones the pinned upstream DiffDock repo at `v1.1.3`, runs inference, and emits a merged `top_rank_complex.pdb` artifact for the existing `structure3d` renderer
 
 The release-grade validation target is Linux + NVIDIA GPU on Modal.
+
+## Research curation repair
+
+Version 1.1.0 fixes option precedence, verifies the exact source/checkpoints,
+rejects invalid controls and incomplete results, and records input/configuration
+hashes. The repaired package still requires an actual supported GPU run before
+promotion. See the [Lab documentation](labs/diffdock-diffdockl-docking-predictor/README.md).

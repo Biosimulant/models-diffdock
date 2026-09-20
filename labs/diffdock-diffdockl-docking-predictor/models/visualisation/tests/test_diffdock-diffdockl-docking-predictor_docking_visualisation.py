@@ -11,18 +11,6 @@ from biosim.modules import ExecutionContext, ExecutionPolicy
 _MODEL_DIR = Path(__file__).resolve().parents[1]
 
 
-def _find_bsim_src(start: Path) -> Path | None:
-    for parent in [start, *start.parents]:
-        for candidate in (parent / "biosim" / "src", parent / "bsim-active" / "biosim" / "src"):
-            if (candidate / "biosim").is_dir():
-                return candidate
-    return None
-
-
-_BSIM_SRC = _find_bsim_src(_MODEL_DIR)
-if _BSIM_SRC is not None and str(_BSIM_SRC) not in sys.path:
-    sys.path.insert(0, str(_BSIM_SRC))
-
 from biosim.signals import RecordSignal
 
 
