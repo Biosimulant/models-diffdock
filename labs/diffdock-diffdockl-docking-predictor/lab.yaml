@@ -64,3 +64,4 @@ wiring:
 - from: diffdock_diffdockl_docking_predictor.run_metadata
   to:
   - visualisation.diffdock_diffdockl_docking_predictor_run_metadata
+intended_use: Generate candidate poses for one prepared receptor and ligand. Raw pose-confidence is not affinity, a calibrated probability or experimental validation.
