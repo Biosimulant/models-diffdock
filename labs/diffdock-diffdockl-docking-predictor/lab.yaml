@@ -36,6 +36,7 @@ models:
     integration_step: 0.01
   path: models/visualisation
 runtime:
+  python_version: '3.11'
   communication_step: 0.01
   duration: 0.01
   initial_inputs: {}
