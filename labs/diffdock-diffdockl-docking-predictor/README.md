@@ -8,15 +8,26 @@ experimental activity.
 
 ## Research status
 
-Version 1.1.0 repairs the wrapper's controls and provenance. Local wrapper tests
-pass. A managed Linux/NVIDIA diagnostic with twenty inference steps, two samples
-and batch size two produced two ranked pose records on 1 October 2026. The
-service excluded their files from durable artifacts, so inspection and delivery
-remain unverified and research promotion is still blocked. The Lab preset now
-uses that diagnostic schedule; this source revision has not been managed-run
-validated or published. The bundled 1a0q receptor and example SMILES are a
-small execution example, not independent docking-accuracy validation. Historical
-screenshots in `assets/` predate this repair and are not its validation evidence.
+The repaired 1.1.0 scientific revision passed an exact managed Modal T4 run on
+1 October 2026 with twenty inference steps, two samples and batch size two.
+Two SDF poses and a 6,294-atom complex were durably delivered. All seven result
+files and their signed Passport bindings were independently verified. The first
+pose passes the basic overlap screen; the second is rejected for six receptor–
+ligand heavy-atom contacts below 1.5 angstrom. Its raw coordinates and rank remain
+available for inspection, with the rejection visible in the table and report.
+
+The executed Python/PyTorch/CUDA/package inventory and both observed ESM hashes
+are recorded. This supports inspectable candidate-pose exploration, not
+experimental binding or general docking accuracy. Passport remains REVIEW:
+exact primary-source evidence is not pinned and transitive caches are not fully
+locked. The bundled 1a0q receptor and example SMILES are a small execution
+example, not an independent docking-accuracy benchmark. Historical screenshots
+in `assets/` predate this repair and are not its validation evidence. This
+documentation correction preserves the tested 1.1.0 science.
+
+Verified run: `3187e7c7-a562-4cc2-a8a5-4887046fe2dd`, private revision
+`e8cd84be-f0e3-4dd7-a276-f615f33fb759`, results SHA-256
+`ab9585c86431bb78330b8fdbf4583191631361851149b9f890ee67383e0e1f43`.
 
 ## Inputs and controls
 
@@ -63,8 +74,10 @@ requires all relevant caches and has not been established for this repair.
 
 Input hashes, source revision, requirements hash, effective configuration,
 checkpoint hashes, command, logs and explicit status accompany each result.
-Transitive dependencies and ESM downloads are not fully locked by this wrapper;
-a release-grade run must also record its actual environment and ESM artifacts.
+Transitive dependencies and ESM downloads are not fully locked by this wrapper.
+The executed managed environment and observed ESM artifact hashes are recorded
+in run metadata; hashes identify observed bytes rather than upstream authenticity
+or deterministic reruns.
 
 ## Reading results
 
@@ -74,7 +87,13 @@ moderate, and scores at or below -1.5 use low. These are heuristics, not calibra
 probabilities. Comparisons across unrelated complexes or receptor conformations
 are not established. See [upstream interpretation](https://github.com/gcorso/DiffDock/tree/9a22cbcbc7612c7565c80e8399d9be298971f156#faq).
 
-`confidence_summary` includes all scores and the interpretation limit.
+Each pose includes a basic geometry screen: any receptor–ligand heavy-atom pair
+closer than 1.5 angstrom rejects that pose for severe overlap. Passing this screen
+does not establish binding or docking accuracy. Raw ranks and coordinates remain
+available; rejection is visible in the pose table and complex annotation.
+
+`confidence_summary` includes all scores, rejected ranks, the number passing the
+basic geometry screen and the interpretation limit.
 `structure_artifacts` contains the same ranked top pose used by the summary,
 merged with the receptor for visualization. `run_metadata.status` is completed
 only when the requested pose count, finite scores and expected artifacts are
