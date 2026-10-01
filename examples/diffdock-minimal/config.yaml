@@ -10,7 +10,6 @@ model:
     run_options:
       complex_name: "1a0q_custom"
       samples_per_complex: 2
-      inference_steps: 4
+      inference_steps: 20
       batch_size: 2
       save_visualisation: false
-

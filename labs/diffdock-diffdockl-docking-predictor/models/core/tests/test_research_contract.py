@@ -51,8 +51,9 @@ def test_stereochemical_smiles_are_not_paths():
         assert model._resolve_ligand_description(smiles) == {"kind": "smiles", "value": smiles}
 
 
-def test_effective_config_honors_controls_under_upstream_yaml_precedence(tmp_path):
-    model = DiffDockLDockingPredictor(default_run_options={"samples_per_complex": 2, "inference_steps": 4, "batch_size": 2})
+@pytest.mark.parametrize("inference_steps,actual_steps", [(4, 4), (20, 19)])
+def test_effective_config_honors_controls_under_upstream_yaml_precedence(tmp_path, inference_steps, actual_steps):
+    model = DiffDockLDockingPredictor(default_run_options={"samples_per_complex": 2, "inference_steps": inference_steps, "batch_size": 2})
     repo = tmp_path / "repo"
     repo.mkdir()
     # These conflicting defaults reproduce upstream v1.1.3's post-argparse merge.
@@ -60,7 +61,8 @@ def test_effective_config_honors_controls_under_upstream_yaml_precedence(tmp_pat
     command = model._build_command(python_executable=sys.executable, repo_dir=repo, output_dir=tmp_path / "run/output", protein_path="receptor.pdb", ligand_input={"kind": "smiles", "value": "CC"}, options=model._resolved_options())
     config = yaml.safe_load(Path(command[command.index("--config") + 1]).read_text())
     assert config["samples_per_complex"] == 2
-    assert config["inference_steps"] == config["actual_steps"] == 4
+    assert config["inference_steps"] == inference_steps
+    assert config["actual_steps"] == actual_steps
     assert config["no_final_step_noise"] is True
     assert config["model_dir"] == str(repo / "workdir/v1.1/score_model")
     assert config["ligand_description"] == "CC"

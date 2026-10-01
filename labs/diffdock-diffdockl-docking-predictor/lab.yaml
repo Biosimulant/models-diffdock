@@ -26,7 +26,7 @@ models:
     default_run_options:
       batch_size: 2
       complex_name: 1a0q_custom
-      inference_steps: 4
+      inference_steps: 20
       samples_per_complex: 2
       save_visualisation: false
     runtime_mode: managed

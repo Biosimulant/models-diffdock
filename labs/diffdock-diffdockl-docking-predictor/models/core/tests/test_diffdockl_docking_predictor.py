@@ -461,7 +461,7 @@ def test_example_files_parse_and_reference_real_interface(biosim):
     assert minimal["model"]["inputs"]["run_options"]["samples_per_complex"] == 2
     assert wiring["models"][0]["path"] == "../../labs/diffdock-diffdockl-docking-predictor/models/core"
     assert wiring["models"][0]["parameters"]["default_protein_path"] == "data/1a0q/1a0q_protein_processed.pdb"
-    assert wiring["models"][0]["parameters"]["default_run_options"]["inference_steps"] == 4
+    assert wiring["models"][0]["parameters"]["default_run_options"]["inference_steps"] == 20
 
 
 def test_invoke_command_streams_stdout_and_stderr_and_preserves_raw_output(biosim, tmp_path, capsys):
@@ -599,4 +599,3 @@ def _generic_input_spec(description=None):
         ),
         description=description,
     )
-

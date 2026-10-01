@@ -9,8 +9,12 @@ experimental activity.
 ## Research status
 
 Version 1.1.0 repairs the wrapper's controls and provenance. Local wrapper tests
-pass; a real run of this repaired version on Linux/NVIDIA GPU is still required
-before research promotion. The bundled 1a0q receptor and example SMILES are a
+pass. A managed Linux/NVIDIA diagnostic with twenty inference steps, two samples
+and batch size two produced two ranked pose records on 1 October 2026. The
+service excluded their files from durable artifacts, so inspection and delivery
+remain unverified and research promotion is still blocked. The Lab preset now
+uses that diagnostic schedule; this source revision has not been managed-run
+validated or published. The bundled 1a0q receptor and example SMILES are a
 small execution example, not independent docking-accuracy validation. Historical
 screenshots in `assets/` predate this repair and are not its validation evidence.
 
@@ -24,9 +28,12 @@ screenshots in `assets/` predate this repair and are not its validation evidence
   output name; `samples_per_complex`, `inference_steps`, and `batch_size` are
   positive integers; `save_visualisation` is boolean. Unknown keys are errors.
 
-The Lab preset requests two samples, four inference steps, and batch size two.
-These low sampling settings are for smoke testing. Upstream defaults otherwise
-use ten samples and twenty steps. Sampling is stochastic; repeated runs are not
+The Lab preset requests two samples, twenty inference steps, and batch size two.
+It replaces the previous four-step smoke preset, whose managed diagnostic
+produced no poses. One successful twenty-step diagnostic does not establish
+that step count was the sole cause or validate docking accuracy. Upstream uses
+ten samples and twenty steps; the two-sample Lab remains a bounded exploration,
+not an accuracy benchmark. Sampling is stochastic; repeated runs are not
 claimed to be byte-identical.
 
 Upstream v1.1.3 loads YAML after command-line arguments. This wrapper writes one
