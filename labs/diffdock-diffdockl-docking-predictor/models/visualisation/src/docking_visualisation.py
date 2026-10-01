@@ -204,7 +204,7 @@ class DockingVisualisationModel(BioModule):
                     "annotations": [
                         {"label": "Top Pose Confidence", "value": confidence.get("top_pose_confidence") if isinstance(confidence, Mapping) else None},
                         {"label": "Confidence Band", "value": confidence.get("confidence_band") if isinstance(confidence, Mapping) else None},
-                        {"label": "Geometry Screen", "value": confidence.get("top_pose_geometry_decision", "not_screened") if isinstance(confidence, Mapping) else "not_screened"},
+                        {"label": "Geometry Screen", "value": {"reject_severe_overlap": "Rejected: severe receptor overlap", "passes_basic_screen": "Basic overlap screen passed"}.get(confidence.get("top_pose_geometry_decision") if isinstance(confidence, Mapping) else None, "Geometry not screened")},
                         {"label": "Pose Count", "value": confidence.get("pose_count") if isinstance(confidence, Mapping) else None},
                     ],
                     "initial_view": {"reset_camera": True},

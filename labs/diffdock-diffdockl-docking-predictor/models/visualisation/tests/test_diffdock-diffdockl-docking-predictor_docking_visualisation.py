@@ -76,3 +76,24 @@ def test_visualisation_model_renders_docking_visuals(tmp_path):
     visuals = module.visualize()
     assert isinstance(visuals, list) and len(visuals) == 2
     assert [visual["render"] for visual in visuals] == ["structure3d", "table"]
+
+
+def test_clashing_pose_is_labeled_rejected_in_table_and_complex(tmp_path):
+    module, step = _load_model()
+    alias = module.source_alias
+    complex_path = tmp_path / "top_complex.pdb"
+    complex_path.write_text("ATOM\nEND\n")
+    def record(name, payload):
+        return RecordSignal(source="test", name=name, value={"payload":payload}, emitted_at=step, spec=module.inputs()[name])
+    payloads = {
+        "run_metadata": {"status":"completed"},
+        "structure_artifacts": {"top_complex_file":str(complex_path)},
+        "confidence_summary": {"top_pose_confidence":0.9,"top_pose_geometry_decision":"reject_severe_overlap"},
+        "pose_summary": [{"rank":1,"confidence":0.9,"geometry_screen":{"decision":"reject_severe_overlap"},"file_path":"pose.sdf"}],
+    }
+    module.set_inputs({f"{alias}_{key}":record(f"{alias}_{key}",value) for key,value in payloads.items()})
+    module.execute({}, context=ExecutionContext(policy=ExecutionPolicy.ONCE_BEFORE_RUN,run_start=0.0,run_end=step))
+    visuals = module.visualize()
+    assert {a['label']:a['value'] for a in visuals[0]['data']['annotations']}['Geometry Screen'] == 'Rejected: severe receptor overlap'
+    table = visuals[1]['data']
+    assert table['rows'][0][table['columns'].index('Geometry')] == 'Rejected: severe receptor overlap'
