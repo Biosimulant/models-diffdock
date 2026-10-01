@@ -58,3 +58,18 @@ See the [Lab research status and controls](../../README.md) for the current
 validation boundary, pinned source/checkpoints and score interpretation. Cached
 source and weights are verified on every run. Requested controls are written to
 an effective YAML because upstream YAML overrides command-line arguments.
+
+Each ranked pose now carries a basic receptor-overlap screen. Any receptor–ligand
+heavy-atom pair closer than 1.5 Å is labeled rejected for severe overlap. All raw
+poses, upstream ranks and confidence scores remain available for inspection.
+The table displays the rejection and the top complex displays its screen status.
+Passing this conservative diagnostic does not establish chemical plausibility,
+binding or docking accuracy. Hydrogens are excluded from the overlap count.
+
+The executed runtime records Python/platform, installed package versions,
+Torch/CUDA and GPU names, plus observed size/SHA-256 for both ESM checkpoint
+files in the configured Torch cache. These hashes describe used bytes and do not
+prove upstream authenticity or lock future downloads. Missing provenance or
+malformed/non-finite pose coordinates produce an explicit error rather than an
+apparently qualified result. This addition has local staging tests only until
+an exact managed retest verifies the private revision.

@@ -188,6 +188,9 @@ class DockingVisualisationModel(BioModule):
                 str(row.get("rank", "")),
                 "" if row.get("confidence") is None else str(row.get("confidence")),
                 str(row.get("confidence_band") or ""),
+                {"reject_severe_overlap": "Rejected: severe receptor overlap", "passes_basic_screen": "Basic overlap screen passed"}.get(
+                    row.get("geometry_screen", {}).get("decision"), "Geometry not screened"
+                ),
                 Path(str(row.get("file_path", ""))).name,
             ])
         return [
@@ -201,6 +204,7 @@ class DockingVisualisationModel(BioModule):
                     "annotations": [
                         {"label": "Top Pose Confidence", "value": confidence.get("top_pose_confidence") if isinstance(confidence, Mapping) else None},
                         {"label": "Confidence Band", "value": confidence.get("confidence_band") if isinstance(confidence, Mapping) else None},
+                        {"label": "Geometry Screen", "value": confidence.get("top_pose_geometry_decision", "not_screened") if isinstance(confidence, Mapping) else "not_screened"},
                         {"label": "Pose Count", "value": confidence.get("pose_count") if isinstance(confidence, Mapping) else None},
                     ],
                     "initial_view": {"reset_camera": True},
@@ -209,7 +213,7 @@ class DockingVisualisationModel(BioModule):
             {
                 "render": "table",
                 "description": "Raw pose-confidence ranking within this complex. Scores are not binding affinity or calibrated probabilities; bands are upstream heuristics.",
-                "data": {"title": "DiffDock Pose Summary", "columns": ["Rank", "Confidence", "Band", "Pose File"], "rows": rows},
+                "data": {"title": "DiffDock Pose Summary", "columns": ["Rank", "Confidence", "Band", "Geometry", "Pose File"], "rows": rows},
             },
         ]
 

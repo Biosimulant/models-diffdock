@@ -11,6 +11,73 @@ import yaml
 from biosim.signals import make_signal
 from src.diffdockl_docking_predictor import DiffDockLDockingPredictor
 
+def _pdb_atom(x, y=0.0, z=0.0, element="C"):
+    return f"HETATM    1   C1 LIG Z   1    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00          {element:>2}"
+
+
+@pytest.mark.parametrize("distance,rejected", [(0.705, True), (1.499, True), (1.5, False), (2.288, False)])
+def test_pose_overlap_screen_flags_observed_clash_and_cutoff_boundary(tmp_path, monkeypatch, distance, rejected):
+    model = DiffDockLDockingPredictor()
+    receptor = tmp_path / "receptor.pdb"
+    # Negative positions exercise neighboring spatial cells as well as the cutoff.
+    receptor.write_text(_pdb_atom(-2.0)+"\n")
+    monkeypatch.setattr(model, "_ligand_pdb_lines_from_sdf", lambda *args: [_pdb_atom(-2.0+distance)])
+    result = model._screen_pose_geometry(receptor, tmp_path / "pose.sdf", "runtime-python")
+    assert result["decision"] == ("reject_severe_overlap" if rejected else "passes_basic_screen")
+    assert result["heavy_atom_pair_count_below_cutoff"] == int(rejected)
+    if rejected:
+        assert result["minimum_overlap_distance_angstrom"] == pytest.approx(distance)
+
+
+def test_overlap_screen_excludes_hydrogens_and_rejects_nonfinite_geometry(tmp_path, monkeypatch):
+    model = DiffDockLDockingPredictor()
+    receptor = tmp_path / "receptor.pdb"
+    receptor.write_text(_pdb_atom(0.0, element="H")+"\n"+_pdb_atom(4.0)+"\n")
+    monkeypatch.setattr(model, "_ligand_pdb_lines_from_sdf", lambda *args: [_pdb_atom(0.0),_pdb_atom(4.0,element="H")])
+    result = model._screen_pose_geometry(receptor, tmp_path / "pose.sdf", "runtime-python")
+    assert result["decision"] == "passes_basic_screen"
+    assert result["ligand_heavy_atom_count"] == 1
+    receptor.write_text(_pdb_atom(float("nan"))+"\n")
+    with pytest.raises(ValueError, match="non-finite"):
+        model._screen_pose_geometry(receptor, tmp_path / "pose.sdf", "runtime-python")
+
+
+def test_all_rejected_pose_set_is_visible_without_rewriting_upstream_rank():
+    model = DiffDockLDockingPredictor()
+    poses = [{"rank": 1,"confidence": -0.97,"geometry_screen": {"decision":"reject_severe_overlap"}},
+             {"rank": 2,"confidence": -2.55,"geometry_screen": {"decision":"reject_severe_overlap"}}]
+    summary = model._build_confidence_summary(poses)
+    assert summary["geometry_screen_pass_count"] == 0
+    assert summary["geometry_rejected_ranks"] == [1,2]
+    assert summary["top_pose_geometry_decision"] == "reject_severe_overlap"
+    assert summary["all_confidences"] == [-0.97,-2.55]
+
+
+def test_runtime_provenance_uses_executed_environment_and_both_checkpoint_bytes(tmp_path, monkeypatch):
+    model = DiffDockLDockingPredictor(cache_dir=str(tmp_path / "cache"))
+    checkpoint_dir = model.cache_dir / "torch" / "hub" / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    names = ["esm2_t33_650M_UR50D.pt", "esm2_t33_650M_UR50D-contact-regression.pt"]
+    for name in names:
+        (checkpoint_dir / name).write_bytes(b"observed checkpoint bytes "+name.encode())
+    environment = {"python_version":"3.11.13","torch_version":"2.0.1+cu117","cuda_available":True,"gpu_names":["Tesla T4"],"packages":[{"name":"fair-esm","version":"2.0.0"}]}
+    def fake_run(command, **kwargs):
+        assert command[0] == "executed-runtime-python"
+        assert kwargs["env"]["TORCH_HOME"] == str(model.cache_dir / "torch")
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(environment), stderr="")
+    monkeypatch.delenv("TORCH_HOME", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = model._collect_runtime_provenance({"python_executable":"executed-runtime-python","repo_dir":tmp_path})
+    assert result["environment"] == environment
+    assert [a["file_name"] for a in result["esm_artifacts"]] == names
+    for artifact in result["esm_artifacts"]:
+        data = (checkpoint_dir / artifact["file_name"]).read_bytes()
+        assert artifact["sha256"] == hashlib.sha256(data).hexdigest()
+        assert artifact["size_bytes"] == len(data)
+    (checkpoint_dir / names[1]).unlink()
+    with pytest.raises(FileNotFoundError, match="required ESM provenance artifact missing"):
+        model._collect_runtime_provenance({"python_executable":"executed-runtime-python","repo_dir":tmp_path})
+
 
 def test_partial_options_preserve_lab_preset():
     model = DiffDockLDockingPredictor(default_run_options={"samples_per_complex": 2, "inference_steps": 4, "batch_size": 2})

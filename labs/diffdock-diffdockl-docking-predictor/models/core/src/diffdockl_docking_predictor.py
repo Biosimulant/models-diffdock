@@ -367,8 +367,13 @@ class DiffDockLDockingPredictor(BioModule):
 
         try:
             self._emit_progress("postprocess", "Collecting ranked poses and confidence scores")
+            metadata["runtime_provenance"] = self._collect_runtime_provenance(runtime)
             prediction_dir = self._find_prediction_dir(output_dir, resolved_options["complex_name"])
             pose_records, top_pose_path, reverseprocess_files = self._collect_pose_records(prediction_dir)
+            for pose in pose_records:
+                pose["geometry_screen"] = self._screen_pose_geometry(
+                    Path(protein_path), Path(pose["file_path"]), runtime["python_executable"]
+                )
             confidence_summary = self._build_confidence_summary(pose_records)
             if len(pose_records) != resolved_options["samples_per_complex"]:
                 raise ValueError("returned pose count differs from requested samples_per_complex")
@@ -1067,10 +1072,101 @@ class DiffDockLDockingPredictor(BioModule):
             "top_pose_rank": top["rank"],
             "top_pose_confidence": top.get("confidence"),
             "confidence_band": top.get("confidence_band"),
+            "top_pose_geometry_decision": top.get("geometry_screen", {}).get("decision", "not_screened"),
             "pose_count": len(pose_records),
             "all_confidences": confidences,
+            "geometry_screen_pass_count": sum(
+                pose.get("geometry_screen", {}).get("decision") == "passes_basic_screen"
+                for pose in pose_records
+            ),
+            "geometry_rejected_ranks": [
+                pose["rank"] for pose in pose_records
+                if pose.get("geometry_screen", {}).get("decision") == "reject_severe_overlap"
+            ],
             "interpretation": "Raw pose-confidence score within this complex; not a binding affinity or calibrated probability. Bands are upstream heuristics.",
         }
+
+    def _collect_runtime_provenance(self, runtime: Mapping[str, Any]) -> dict[str, Any]:
+        script = textwrap.dedent('''
+            import importlib.metadata, json, platform, sys, torch
+            print(json.dumps({
+                "python_version": platform.python_version(),
+                "python_executable": sys.executable,
+                "platform": platform.platform(),
+                "packages": sorted(
+                    [{"name": d.metadata.get("Name", ""), "version": d.version}
+                     for d in importlib.metadata.distributions()],
+                    key=lambda d: (d["name"].lower(), d["version"])),
+                "torch_version": torch.__version__,
+                "cuda_version": torch.version.cuda,
+                "cuda_available": torch.cuda.is_available(),
+                "gpu_names": [torch.cuda.get_device_name(i)
+                              for i in range(torch.cuda.device_count())]
+            }))
+        ''')
+        env = self._command_env(Path(runtime["repo_dir"]))
+        result = subprocess.run(
+            [runtime["python_executable"], "-c", script],
+            cwd=runtime["repo_dir"], env=env, capture_output=True, text=True,
+            timeout=min(self.command_timeout_s, 60.0), check=True,
+        )
+        environment = json.loads(result.stdout)
+        checkpoint_dir = Path(env["TORCH_HOME"]) / "hub" / "checkpoints"
+        expected = ("esm2_t33_650M_UR50D.pt", "esm2_t33_650M_UR50D-contact-regression.pt")
+        artifacts = []
+        for name in expected:
+            path = checkpoint_dir / name
+            if not path.is_file():
+                raise FileNotFoundError(f"required ESM provenance artifact missing: {name}")
+            artifacts.append({"file_name": name, "size_bytes": path.stat().st_size,
+                              "sha256": self._file_sha256(path)})
+        return {"environment": environment, "esm_artifacts": artifacts,
+                "checksum_scope": "Observed bytes used from the configured Torch cache; not an upstream authenticity guarantee."}
+
+    def _screen_pose_geometry(self, protein: Path, ligand: Path, python_executable: str) -> dict[str, Any]:
+        # Use the same runtime's RDKit conversion, including every ranked pose.
+        ligand_lines = self._ligand_pdb_lines_from_sdf(ligand, python_executable)
+        def heavy_coordinates(lines):
+            coordinates = []
+            for line in lines:
+                if not line.startswith(("ATOM  ", "HETATM")):
+                    continue
+                element = line[76:78].strip().upper()
+                if not element:
+                    # PDB atom-name alignment distinguishes hydrogen from Hg etc.
+                    element = line[12:16].strip().lstrip("0123456789")[:1].upper()
+                if element in {"H", "D"}:
+                    continue
+                point = tuple(float(line[a:b]) for a,b in ((30,38),(38,46),(46,54)))
+                if not all(math.isfinite(v) for v in point):
+                    raise ValueError("non-finite heavy-atom coordinates in pose geometry screen")
+                coordinates.append(point)
+            if not coordinates:
+                raise ValueError("no heavy atoms in pose geometry screen")
+            return coordinates
+        receptor = heavy_coordinates(protein.read_text().splitlines())
+        pose = heavy_coordinates(ligand_lines)
+        cutoff = 1.5  # Conservative severe-overlap diagnostic, not a validity metric.
+        grid: dict[tuple[int, int, int], list[tuple[float, ...]]] = {}
+        for point in receptor:
+            cell = tuple(math.floor(v / cutoff) for v in point)
+            grid.setdefault(cell, []).append(point)
+        distances = []
+        for point in pose:
+            cell = tuple(math.floor(v / cutoff) for v in point)
+            for dx in (-1,0,1):
+                for dy in (-1,0,1):
+                    for dz in (-1,0,1):
+                        for target in grid.get((cell[0]+dx,cell[1]+dy,cell[2]+dz), ()):
+                            d2 = sum((a-b)**2 for a,b in zip(point,target))
+                            if d2 < cutoff*cutoff:
+                                distances.append(math.sqrt(d2))
+        return {"decision": "reject_severe_overlap" if distances else "passes_basic_screen",
+                "severe_overlap_cutoff_angstrom": cutoff,
+                "heavy_atom_pair_count_below_cutoff": len(distances),
+                "minimum_overlap_distance_angstrom": min(distances) if distances else None,
+                "ligand_heavy_atom_count": len(pose),
+                "limitation": "A basic overlap screen does not validate binding or docking accuracy. Raw ranks and confidence are preserved."}
 
     def _build_structure_artifacts(
         self,

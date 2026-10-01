@@ -43,6 +43,7 @@ def _patch_invoke_command(monkeypatch, predictor_cls, handler):
     monkeypatch.setattr(predictor_cls, "_invoke_command", fake_invoke)
     monkeypatch.setattr(predictor_cls, "_validate_runtime_platform", lambda self: None)
     monkeypatch.setattr(predictor_cls, "_ensure_checkpoints", lambda self, repo, metadata: None)
+    monkeypatch.setattr(predictor_cls, "_collect_runtime_provenance", lambda self, runtime: {"environment": {"fixture_only": True}, "esm_artifacts": []})
 
 
 def test_instantiation(biosim, tmp_path):
